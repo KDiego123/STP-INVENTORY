@@ -1,8 +1,13 @@
 backend/.env
 backend/.venv/
 backend/__pycache__/
+**/__pycache__/
 backend/**/*.py[cod]
+*.py[cod]
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+*.rar
 *.log
