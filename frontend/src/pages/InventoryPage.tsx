@@ -61,11 +61,14 @@ export function InventoryPage({ notify }: { notify: (message: string, type?: 'su
       <select value={filters.categoria_id} onChange={(e) => setFilters({ ...filters, categoria_id: e.target.value })}><option value="">Todas las categorías</option>{options.categorias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select>
       <select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{options.ubicaciones.map((item) => <option value={item.id} key={item.id}>{item.codigo}</option>)}</select>
       <select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="activos">Activos</option><option value="bajo">Stock bajo</option><option value="inactivos">Inactivos</option><option value="todos">Todos</option></select>
+      <button className="btn btn-secondary">Filtrar</button><button type="button" className="btn btn-ghost" onClick={clear}>Limpiar</button>
+    </form>
+    <div className="sort-bar" aria-label="Orden del inventario">
+      <span>Ordenar por</span>
       <button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Alternar el orden por ID">
         {filters.orden === 'desc' ? '↓ ID · nuevos primero' : '↑ ID · antiguos primero'}
       </button>
-      <button className="btn btn-secondary">Filtrar</button><button type="button" className="btn btn-ghost" onClick={clear}>Limpiar</button>
-    </form>
+    </div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> registros encontrados</div>
       <div className="table-responsive"><table><thead><tr><th>Código y descripción</th><th>Categoría</th><th>Ubicación</th><th className="numeric">Stock</th><th>Condición</th><th>Estado</th><th /></tr></thead>
