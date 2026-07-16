@@ -32,6 +32,7 @@ export function MovementsPage({ notify }: { notify: (message: string, type?: 'su
   }, [applied, page])
   useEffect(() => { void load() }, [load])
   const search = (event: FormEvent) => { event.preventDefault(); setPage(1); setApplied(filters) }
+  const clear = () => { const next = { q: '', tipo_id: '', estado: 'vigentes', orden: 'desc' }; setFilters(next); setApplied(next); setPage(1) }
   const toggleOrder = () => {
     const orden = filters.orden === 'desc' ? 'asc' : 'desc'
     const next = { ...filters, orden }
@@ -47,11 +48,11 @@ export function MovementsPage({ notify }: { notify: (message: string, type?: 'su
 
   return <>
     <div className="page-heading"><div><p className="eyebrow">Control de operaciones</p><h1>Movimientos</h1><p>Registra entradas, salidas, ajustes y traslados.</p></div><button className="btn btn-primary" onClick={() => setCreating(true)}>＋ Registrar movimiento</button></div>
-    <form className="filter-bar" onSubmit={search}>
+    <form className="filter-bar filter-bar-movements" onSubmit={search}>
       <label className="search-field"><span>⌕</span><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Artículo, responsable o documento" /></label>
       <select value={filters.tipo_id} onChange={(e) => setFilters({ ...filters, tipo_id: e.target.value })}><option value="">Todos los tipos</option>{options.tipos.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select>
       <select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="vigentes">Vigentes</option><option value="anulados">Anulados</option><option value="todos">Todos</option></select>
-      <button className="btn btn-secondary">Filtrar</button>
+      <div className="filter-actions"><button className="btn btn-primary">Filtrar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
     </form>
     <div className="sort-bar" aria-label="Orden de los movimientos">
       <span>Ordenar por ID</span>
