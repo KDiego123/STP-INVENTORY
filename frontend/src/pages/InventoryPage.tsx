@@ -56,12 +56,12 @@ export function InventoryPage({ notify }: { notify: (message: string, type?: 'su
 
   return <>
     <div className="page-heading"><div><p className="eyebrow">Almacén Lima</p><h1>Inventario</h1><p>Consulta y administra los artículos registrados.</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button></div>
-    <form className="filter-bar" onSubmit={search}>
+    <form className="filter-bar filter-bar-inventory" onSubmit={search}>
       <label className="search-field"><span>⌕</span><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Buscar código, descripción u observación" /></label>
       <select value={filters.categoria_id} onChange={(e) => setFilters({ ...filters, categoria_id: e.target.value })}><option value="">Todas las categorías</option>{options.categorias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select>
       <select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{options.ubicaciones.map((item) => <option value={item.id} key={item.id}>{item.codigo}</option>)}</select>
       <select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="activos">Activos</option><option value="bajo">Stock bajo</option><option value="inactivos">Inactivos</option><option value="todos">Todos</option></select>
-      <button className="btn btn-secondary">Filtrar</button><button type="button" className="btn btn-ghost" onClick={clear}>Limpiar</button>
+      <div className="filter-actions"><button className="btn btn-primary">Filtrar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
     </form>
     <div className="sort-bar" aria-label="Orden del inventario">
       <span>Ordenar por</span>
