@@ -86,11 +86,13 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .stock-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 2px; border-bottom: 1px solid #edf1f3; }
 .stock-item > span { flex: 0 0 auto; padding: 6px 8px; border-radius: 7px; color: #a33339; background: #fcebed; font-size: 10px; font-weight: 800; }
 
-.filter-bar { display: flex; gap: 9px; align-items: center; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: white; box-shadow: 0 5px 18px rgba(24,52,70,.045); }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-bottom: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: white; box-shadow: 0 5px 18px rgba(24,52,70,.045); }
 .filter-bar.compact { max-width: 620px; }
 .filter-bar select, .filter-bar input { height: 40px; border: 1px solid #cfdae0; border-radius: 8px; outline: none; background: white; color: #29404e; }
 .filter-bar select { min-width: 155px; padding: 0 31px 0 10px; }
 .sort-button { white-space: nowrap; }
+.sort-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafb; }
+.sort-bar > span { color: var(--muted); font-size: 11px; font-weight: 700; }
 .search-field { position: relative; flex: 1; min-width: 230px; }
 .search-field span { position: absolute; left: 12px; top: 9px; color: #8396a1; font-size: 18px; }
 .search-field input { width: 100%; padding: 0 12px 0 36px; }
@@ -175,6 +177,7 @@ tbody tr:hover { background: #fafcfd; }
 @media (max-width: 560px) {
   .stats-grid { grid-template-columns: 1fr; }.stat-card { min-height: 86px; }
   .filter-bar select, .filter-bar .btn { flex: 1; min-width: 135px; }.search-field { min-width: 100%; }
+  .sort-bar { align-items: stretch; flex-direction: column; }.sort-bar .btn { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }.span-2, .span-3 { grid-column: span 1; }
   .modal-backdrop { padding: 0; align-items: end; }.modal, .modal-wide { max-height: 94vh; border-radius: 16px 16px 0 0; }
   .activity-item { grid-template-columns: auto 1fr; }.activity-meta { grid-column: 2; text-align: left; }

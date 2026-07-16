@@ -51,11 +51,14 @@ export function MovementsPage({ notify }: { notify: (message: string, type?: 'su
       <label className="search-field"><span>⌕</span><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Artículo, responsable o documento" /></label>
       <select value={filters.tipo_id} onChange={(e) => setFilters({ ...filters, tipo_id: e.target.value })}><option value="">Todos los tipos</option>{options.tipos.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select>
       <select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="vigentes">Vigentes</option><option value="anulados">Anulados</option><option value="todos">Todos</option></select>
-      <button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Cambiar el orden por fecha">
-        {filters.orden === 'desc' ? '↓ Más recientes primero' : '↑ Más antiguos primero'}
-      </button>
       <button className="btn btn-secondary">Filtrar</button>
     </form>
+    <div className="sort-bar" aria-label="Orden de los movimientos">
+      <span>Ordenar por ID</span>
+      <button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Cambiar el orden de los movimientos por ID">
+        {filters.orden === 'desc' ? '↓ Nuevos primero' : '↑ Antiguos primero'}
+      </button>
+    </div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> movimientos encontrados</div>
       <div className="table-responsive"><table><thead><tr><th>Fecha</th><th>Tipo y artículo</th><th className="numeric">Cantidad</th><th>Stock</th><th>Responsable</th><th>Documento</th><th>Estado</th><th /></tr></thead>
