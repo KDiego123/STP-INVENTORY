@@ -59,6 +59,7 @@ class InventarioOut(ORMModel):
     fecha_ultima_entrada: date | None
     fecha_ultima_salida: date | None
     calibracion: str | None
+    fecha_calibracion: date | None
     observaciones: str | None
     activo: bool
     categoria: CatalogoBase
@@ -80,6 +81,7 @@ class InventarioCreate(BaseModel):
     fecha_ultima_entrada: date | None = None
     fecha_ultima_salida: date | None = None
     calibracion: Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] | None = None
+    fecha_calibracion: date | None = None
     observaciones: str | None = None
     activo: bool = True
 
