@@ -43,6 +43,7 @@ export type Inventario = {
   costo_unitario: string | null
   fecha_ultima_entrada: string | null
   fecha_ultima_salida: string | null
+  calibracion: 'NO_CUMPLE' | 'SIN_CALIBRAR' | 'CALIBRADO' | null
   observaciones: string | null
   activo: boolean
   categoria: Catalogo

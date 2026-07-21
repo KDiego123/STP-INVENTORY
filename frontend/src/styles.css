@@ -42,6 +42,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .topbar { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; color: #60717d; background: rgba(255,255,255,.91); border-bottom: 1px solid var(--line); backdrop-filter: blur(8px); }
 .topbar span { font-size: 12px; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; }
 .topbar time { font-size: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 18px; }
+.view-switcher { display: flex; align-items: center; gap: 8px; }
+.view-switcher > span { color: #78909c; font-size: 9px; }
+.view-switcher select { min-height: 34px; padding: 6px 30px 6px 10px; border: 1px solid #cddae0; border-radius: 8px; color: #244858; background: white; font-size: 11px; font-weight: 700; }
 .menu-button { display: none; border: 0; background: transparent; font-size: 22px; }
 main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 
@@ -74,6 +78,16 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 18px 20px; border-bottom: 1px solid #edf1f3; }
 .card-header h2 { margin: 0 0 3px; color: #193b50; font-size: 16px; }
 .card-header p { margin: 0; color: var(--muted); font-size: 12px; }
+.role-preview { overflow: hidden; }
+.role-tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); background: #f8fafb; }
+.role-tabs button { flex: 1; min-height: 42px; border: 1px solid transparent; border-radius: 8px; color: #657985; background: transparent; font-weight: 700; }
+.role-tabs button.active { color: #176f70; border-color: #bbdcd8; background: white; box-shadow: 0 4px 12px rgba(24,52,70,.06); }
+.role-preview-content { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; padding: 26px; }
+.role-preview-content h2 { margin: 3px 0 7px; color: #173c53; font-size: 22px; }.role-preview-content p:not(.eyebrow) { margin: 0; color: var(--muted); }
+.role-preview-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 16px; color: white; background: linear-gradient(145deg, #1b8f85, #164f68); font-size: 24px; font-weight: 800; }
+.role-capabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 26px 24px; }
+.role-capabilities > div { display: flex; align-items: center; gap: 9px; padding: 12px; border: 1px solid #e2eaee; border-radius: 9px; color: #3f5c69; font-size: 12px; }.role-capabilities span { color: #16847a; font-weight: 900; }
+.role-preview-actions { display: flex; justify-content: flex-end; padding: 16px 26px; border-top: 1px solid var(--line); background: #fbfcfd; }
 .activity-list, .stock-list { padding: 5px 18px 10px; }
 .activity-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 13px 2px; border-bottom: 1px solid #edf1f3; }
 .activity-item:last-child, .stock-item:last-child { border-bottom: 0; }
@@ -113,11 +127,13 @@ tbody tr:hover { background: #fafcfd; }
 .row-muted { opacity: .62; background: #f8f9fa; }
 .numeric { text-align: right; white-space: nowrap; }.numeric small { display: block; color: var(--muted); }
 .item-title { display: block; max-width: 350px; padding: 0; overflow: hidden; border: 0; color: #176e78; background: transparent; font-weight: 800; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.item-title-static { display: block; max-width: 350px; overflow: hidden; color: #294857; text-overflow: ellipsis; white-space: nowrap; }
 .item-subtitle { display: block; max-width: 350px; margin-top: 3px; overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
 .tag { display: inline-block; max-width: 180px; padding: 5px 7px; overflow: hidden; border-radius: 6px; color: #4c6876; background: #eef3f5; font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
 .location-code { padding: 5px 7px; border: 1px solid #dce5e9; border-radius: 6px; color: #395766; font-family: ui-monospace, monospace; font-weight: 700; }
 .badge { display: inline-block; margin: 2px 4px 2px 0; padding: 5px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .badge-success { color: #187259; background: #e5f5ee; }.badge-neutral { color: #687983; background: #edf1f3; }.badge-danger { color: #a73138; background: #fbe7e9; }
+.calibration-calibrado { color: #187259; background: #e5f5ee; }.calibration-sin_calibrar { color: #96621c; background: #fff2d9; }.calibration-no_cumple { color: #a73138; background: #fbe7e9; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; color: var(--muted); font-size: 11px; }
@@ -175,6 +191,7 @@ tbody tr:hover { background: #fafcfd; }
   .sidebar { transform: translateX(-105%); transition: transform .2s ease; }.sidebar.open { transform: translateX(0); }
   .sidebar-overlay { position: fixed; inset: 0; z-index: 35; border: 0; background: rgba(8,28,40,.48); }
   .content-shell { margin-left: 0; }.menu-button { display: block; }.topbar { padding: 0 16px; }.topbar span { display: none; }
+  .topbar-actions { gap: 8px; }.topbar time { display: none; }
   main { padding: 20px 15px; }.page-heading { align-items: flex-start; flex-direction: column; }.page-heading .btn { width: 100%; }
   .catalog-grid { grid-template-columns: 1fr; }
   .filter-bar-inventory, .filter-bar-movements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -191,4 +208,5 @@ tbody tr:hover { background: #fafcfd; }
   .form-grid { grid-template-columns: 1fr; }.span-2, .span-3 { grid-column: span 1; }
   .modal-backdrop { padding: 0; align-items: end; }.modal, .modal-wide { max-height: 94vh; border-radius: 16px 16px 0 0; }
   .activity-item { grid-template-columns: auto 1fr; }.activity-meta { grid-column: 2; text-align: left; }
+  .role-tabs, .role-capabilities { grid-template-columns: 1fr; flex-direction: column; }.role-preview-content { grid-template-columns: 1fr; }.role-preview-actions .btn { width: 100%; }
 }
