@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -146,3 +147,65 @@ class Movimiento(Base):
     ubicacion_destino: Mapped[Ubicacion | None] = relationship(
         foreign_keys=[ubicacion_destino_id], lazy="selectin"
     )
+
+
+class SolicitudEquipo(Base):
+    __tablename__ = "solicitudes_equipos"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(30), unique=True)
+    estado: Mapped[str] = mapped_column(String(30), default="ESPERA_APROBACION")
+    ubicacion_origen_id: Mapped[int] = mapped_column(ForeignKey("ubicaciones.id"))
+    ubicacion_destino_id: Mapped[int] = mapped_column(ForeignKey("ubicaciones.id"))
+    fecha_envio: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    guia: Mapped[str | None] = mapped_column(String(150))
+    transportista: Mapped[str | None] = mapped_column(String(150))
+    solicitante_usuario_id: Mapped[int | None] = mapped_column(BigInteger)
+    solicitante_nombre: Mapped[str] = mapped_column(String(150))
+    aprobado_por_usuario_id: Mapped[int | None] = mapped_column(BigInteger)
+    aprobado_por_nombre: Mapped[str | None] = mapped_column(String(150))
+    fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recibido_por_usuario_id: Mapped[int | None] = mapped_column(BigInteger)
+    recibido_por_nombre: Mapped[str | None] = mapped_column(String(150))
+    fecha_recepcion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observaciones_salida: Mapped[str | None] = mapped_column(Text)
+    observaciones_recepcion: Mapped[str | None] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    ubicacion_origen: Mapped[Ubicacion] = relationship(foreign_keys=[ubicacion_origen_id], lazy="selectin")
+    ubicacion_destino: Mapped[Ubicacion] = relationship(foreign_keys=[ubicacion_destino_id], lazy="selectin")
+    detalles: Mapped[list["SolicitudEquipoDetalle"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    historial: Mapped[list["SolicitudEquipoHistorial"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+
+
+class SolicitudEquipoDetalle(Base):
+    __tablename__ = "solicitudes_equipos_detalle"
+    __table_args__ = (CheckConstraint("cantidad > 0", name="solicitud_equipo_cantidad_positiva"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    solicitud_id: Mapped[int] = mapped_column(ForeignKey("solicitudes_equipos.id", ondelete="CASCADE"))
+    inventario_id: Mapped[int] = mapped_column(ForeignKey("inventario.id"))
+    cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    condicion_salida_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
+    calibracion_salida: Mapped[str | None] = mapped_column(String(20))
+    condicion_recepcion_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
+    calibracion_recepcion: Mapped[str | None] = mapped_column(String(20))
+    observaciones: Mapped[str | None] = mapped_column(Text)
+
+    inventario: Mapped[Inventario] = relationship(lazy="selectin")
+    condicion_salida: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_salida_id], lazy="selectin")
+    condicion_recepcion: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_recepcion_id], lazy="selectin")
+
+
+class SolicitudEquipoHistorial(Base):
+    __tablename__ = "solicitudes_equipos_historial"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    solicitud_id: Mapped[int] = mapped_column(ForeignKey("solicitudes_equipos.id", ondelete="CASCADE"))
+    estado_anterior: Mapped[str | None] = mapped_column(String(30))
+    estado_nuevo: Mapped[str] = mapped_column(String(30))
+    usuario_id: Mapped[int | None] = mapped_column(BigInteger)
+    usuario_nombre: Mapped[str] = mapped_column(String(150))
+    comentario: Mapped[str | None] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

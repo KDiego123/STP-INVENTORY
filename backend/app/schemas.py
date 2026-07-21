@@ -179,6 +179,97 @@ class PaginatedMovimientos(BaseModel):
     pages: int
 
 
+EstadoSolicitud = Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO"]
+EstadoCalibracion = Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"]
+
+
+class SolicitudEquipoDetalleCreate(BaseModel):
+    inventario_id: int
+    cantidad: Decimal = Field(gt=0, decimal_places=3)
+    condicion_salida_id: int | None = None
+    calibracion_salida: EstadoCalibracion | None = None
+    observaciones: str | None = None
+
+
+class SolicitudEquipoCreate(BaseModel):
+    ubicacion_origen_id: int
+    ubicacion_destino_id: int
+    fecha_envio: datetime
+    guia: str | None = Field(default=None, max_length=150)
+    transportista: str | None = Field(default=None, max_length=150)
+    solicitante_usuario_id: int | None = None
+    solicitante_nombre: str = Field(min_length=1, max_length=150)
+    observaciones_salida: str | None = None
+    detalles: list[SolicitudEquipoDetalleCreate] = Field(min_length=1)
+
+
+class SolicitudTransicion(BaseModel):
+    usuario_id: int | None = None
+    usuario_nombre: str = Field(min_length=1, max_length=150)
+    comentario: str | None = None
+
+
+class SolicitudRecepcionDetalle(BaseModel):
+    detalle_id: int
+    condicion_recepcion_id: int | None = None
+    calibracion_recepcion: EstadoCalibracion | None = None
+
+
+class SolicitudRecepcion(SolicitudTransicion):
+    detalles: list[SolicitudRecepcionDetalle] = Field(default_factory=list)
+
+
+class SolicitudEquipoDetalleOut(ORMModel):
+    id: int
+    cantidad: Decimal
+    calibracion_salida: str | None
+    calibracion_recepcion: str | None
+    observaciones: str | None
+    inventario: InventarioOut
+    condicion_salida: CatalogoBase | None
+    condicion_recepcion: CatalogoBase | None
+
+
+class SolicitudEquipoHistorialOut(ORMModel):
+    id: int
+    estado_anterior: str | None
+    estado_nuevo: str
+    usuario_id: int | None
+    usuario_nombre: str
+    comentario: str | None
+    creado_en: datetime
+
+
+class SolicitudEquipoOut(ORMModel):
+    id: int
+    codigo: str
+    estado: EstadoSolicitud
+    fecha_envio: datetime
+    guia: str | None
+    transportista: str | None
+    solicitante_usuario_id: int | None
+    solicitante_nombre: str
+    aprobado_por_nombre: str | None
+    fecha_aprobacion: datetime | None
+    recibido_por_nombre: str | None
+    fecha_recepcion: datetime | None
+    observaciones_salida: str | None
+    observaciones_recepcion: str | None
+    creado_en: datetime
+    ubicacion_origen: UbicacionOut
+    ubicacion_destino: UbicacionOut
+    detalles: list[SolicitudEquipoDetalleOut]
+    historial: list[SolicitudEquipoHistorialOut]
+
+
+class PaginatedSolicitudes(BaseModel):
+    items: list[SolicitudEquipoOut]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 class DashboardOut(BaseModel):
     articulos_activos: int
     categorias_activas: int
