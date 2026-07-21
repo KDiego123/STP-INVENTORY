@@ -107,6 +107,7 @@ class Inventario(Base):
     fecha_ultima_entrada: Mapped[date | None] = mapped_column(Date)
     fecha_ultima_salida: Mapped[date | None] = mapped_column(Date)
     calibracion: Mapped[str | None] = mapped_column(String(20))
+    fecha_calibracion: Mapped[date | None] = mapped_column(Date)
     observaciones: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

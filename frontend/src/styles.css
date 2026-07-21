@@ -134,6 +134,7 @@ tbody tr:hover { background: #fafcfd; }
 .badge { display: inline-block; margin: 2px 4px 2px 0; padding: 5px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .badge-success { color: #187259; background: #e5f5ee; }.badge-neutral { color: #687983; background: #edf1f3; }.badge-danger { color: #a73138; background: #fbe7e9; }
 .calibration-calibrado { color: #187259; background: #e5f5ee; }.calibration-sin_calibrar { color: #96621c; background: #fff2d9; }.calibration-no_cumple { color: #a73138; background: #fbe7e9; }
+.calibration-date { display: block; margin-top: 3px; color: var(--muted); white-space: nowrap; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; color: var(--muted); font-size: 11px; }
@@ -162,6 +163,11 @@ tbody tr:hover { background: #fafcfd; }
 .field > span b { margin-left: 3px; color: var(--danger); }
 .field input, .field select, .field textarea { width: 100%; min-height: 41px; padding: 9px 10px; border: 1px solid #ccd9df; border-radius: 8px; outline: none; color: #203b49; background: white; font-size: 12px; font-weight: 400; }
 .field textarea { resize: vertical; }
+.calibration-panel { overflow: hidden; border: 1px solid #d8e4e8; border-radius: 11px; background: #f8fbfc; }
+.calibration-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 12px 14px; border-bottom: 1px solid #e2eaed; }
+.calibration-panel-heading > div { display: grid; gap: 2px; }.calibration-panel-heading strong { color: #244858; font-size: 12px; }.calibration-panel-heading small { color: var(--muted); font-size: 10px; }
+.calibration-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 14px; }
+.calibration-panel > p { margin: 0; padding: 14px; color: var(--muted); font-size: 11px; }
 .span-2 { grid-column: span 2; }.span-3 { grid-column: span 3; }
 .check-field { display: flex; align-items: center; gap: 8px; color: #3d5967; font-size: 12px; font-weight: 700; }
 .check-field input { width: 17px; height: 17px; accent-color: var(--teal); }
@@ -206,6 +212,7 @@ tbody tr:hover { background: #fafcfd; }
   .filter-actions .btn { flex: 1; }
   .sort-bar { align-items: stretch; flex-direction: column; }.sort-bar .btn { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }.span-2, .span-3 { grid-column: span 1; }
+  .calibration-fields { grid-template-columns: 1fr; }
   .modal-backdrop { padding: 0; align-items: end; }.modal, .modal-wide { max-height: 94vh; border-radius: 16px 16px 0 0; }
   .activity-item { grid-template-columns: auto 1fr; }.activity-meta { grid-column: 2; text-align: left; }
   .role-tabs, .role-capabilities { grid-template-columns: 1fr; flex-direction: column; }.role-preview-content { grid-template-columns: 1fr; }.role-preview-actions .btn { width: 100%; }
