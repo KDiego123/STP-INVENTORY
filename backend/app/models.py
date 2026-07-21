@@ -106,6 +106,7 @@ class Inventario(Base):
     costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     fecha_ultima_entrada: Mapped[date | None] = mapped_column(Date)
     fecha_ultima_salida: Mapped[date | None] = mapped_column(Date)
+    calibracion: Mapped[str | None] = mapped_column(String(20))
     observaciones: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

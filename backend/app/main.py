@@ -83,6 +83,11 @@ def _validar_catalogos_inventario(db: Session, datos: InventarioCreate):
     ubicacion = _obtener(db, Ubicacion, datos.ubicacion_id, "Ubicación")
     if not categoria.activo or not unidad.activo or not ubicacion.activo:
         raise HTTPException(status_code=400, detail="Seleccione catálogos activos.")
+    es_equipo = categoria.nombre.strip().upper() == "EQUIPOS"
+    if es_equipo and datos.calibracion is None:
+        raise HTTPException(status_code=400, detail="Seleccione el estado de calibración del equipo.")
+    if not es_equipo and datos.calibracion is not None:
+        raise HTTPException(status_code=400, detail="La calibración solo corresponde a la categoría EQUIPOS.")
     if datos.condicion_id is not None:
         condicion = _obtener(db, Condicion, datos.condicion_id, "Condición")
         if not condicion.activo:

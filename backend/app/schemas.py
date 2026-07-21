@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -57,6 +58,7 @@ class InventarioOut(ORMModel):
     costo_unitario: Decimal | None
     fecha_ultima_entrada: date | None
     fecha_ultima_salida: date | None
+    calibracion: str | None
     observaciones: str | None
     activo: bool
     categoria: CatalogoBase
@@ -77,6 +79,7 @@ class InventarioCreate(BaseModel):
     costo_unitario: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     fecha_ultima_entrada: date | None = None
     fecha_ultima_salida: date | None = None
+    calibracion: Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] | None = None
     observaciones: str | None = None
     activo: bool = True
 
