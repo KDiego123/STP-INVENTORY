@@ -71,11 +71,11 @@ export function InventoryPage({ notify }: { notify: (message: string, type?: 'su
     </div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> registros encontrados</div>
-      <div className="table-responsive"><table><thead><tr><th>Código y descripción</th><th>Categoría</th><th>Ubicación</th><th className="numeric">Stock</th><th>Condición</th><th>Estado</th><th /></tr></thead>
+      <div className="table-responsive"><table><thead><tr><th>Descripción y código</th><th>Categoría</th><th>Ubicación</th><th className="numeric">Stock</th><th>Condición</th><th>Estado</th><th /></tr></thead>
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
           return <tr key={item.id} className={!item.activo ? 'row-muted' : ''}>
-            <td><button className="item-title" onClick={() => setEditing(item)}>{item.codigo}</button><small className="item-subtitle">{item.descripcion}</small></td>
+            <td><button className="item-title" onClick={() => setEditing(item)}>{item.descripcion}</button><small className="item-subtitle">{item.codigo}</small></td>
             <td><span className="tag">{item.categoria.nombre}</span></td><td><span className="location-code">{item.ubicacion.codigo}</span></td>
             <td className={`numeric ${low ? 'text-danger' : ''}`}><strong>{formatNumber(item.stock_actual)}</strong><small>{item.unidad_medida.codigo}</small></td>
             <td>{item.condicion?.nombre ?? '—'}</td><td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>{low && <span className="badge badge-danger">Stock bajo</span>}</td>
