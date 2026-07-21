@@ -5,6 +5,7 @@ import type {
   Inventario,
   Movimiento,
   Paginated,
+  SolicitudEquipo,
   TipoMovimiento,
   Ubicacion,
   Unidad,
@@ -60,6 +61,13 @@ export const movementsApi = {
   list: (params: Record<string, string | number>) => api<Paginated<Movimiento>>('/movimientos', { params }),
   create: (body: unknown) => api<Movimiento>('/movimientos', { method: 'POST', body: JSON.stringify(body) }),
   cancel: (id: number) => api<Movimiento>(`/movimientos/${id}/anular`, { method: 'POST' }),
+}
+
+export const equipmentRequestsApi = {
+  list: (params: Record<string, string | number>) => api<Paginated<SolicitudEquipo>>('/solicitudes-equipos', { params }),
+  create: (body: unknown) => api<SolicitudEquipo>('/solicitudes-equipos', { method: 'POST', body: JSON.stringify(body) }),
+  approve: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/aprobar`, { method: 'POST', body: JSON.stringify(body) }),
+  receive: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/recibir`, { method: 'POST', body: JSON.stringify(body) }),
 }
 
 export const catalogsApi = {

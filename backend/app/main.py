@@ -19,6 +19,9 @@ from .models import (
     Condicion,
     Inventario,
     Movimiento,
+    SolicitudEquipo,
+    SolicitudEquipoDetalle,
+    SolicitudEquipoHistorial,
     TipoMovimiento,
     Ubicacion,
     UnidadMedida,
@@ -34,6 +37,11 @@ from .schemas import (
     MovimientoOut,
     PaginatedInventario,
     PaginatedMovimientos,
+    PaginatedSolicitudes,
+    SolicitudEquipoCreate,
+    SolicitudEquipoOut,
+    SolicitudRecepcion,
+    SolicitudTransicion,
     TipoMovimientoOut,
     UbicacionCreate,
     UbicacionOut,
@@ -447,6 +455,144 @@ def movimiento_anular(pk: int, db: DB):
     except HTTPException:
         db.rollback()
         raise
+
+
+def _solicitud_codigo(db: Session) -> str:
+    ultimo = db.scalar(select(func.max(SolicitudEquipo.id))) or 0
+    return f"ENV-{datetime.now().year}-{ultimo + 1:05d}"
+
+
+def _validar_detalle_equipo(db: Session, inventario_id: int, cantidad: Decimal):
+    item = _obtener(db, Inventario, inventario_id, "Equipo")
+    if item.categoria.nombre.strip().upper() != "EQUIPOS":
+        raise HTTPException(status_code=400, detail=f"{item.codigo} no pertenece a la categoría EQUIPOS.")
+    if not item.activo:
+        raise HTTPException(status_code=400, detail=f"{item.codigo} está inactivo.")
+    if cantidad > item.stock_actual:
+        raise HTTPException(status_code=400, detail=f"Stock insuficiente para {item.codigo}.")
+    return item
+
+
+@app.get("/api/solicitudes-equipos", response_model=PaginatedSolicitudes)
+def solicitudes_listar(
+    db: DB,
+    estado: Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO"] | None = None,
+    solicitante: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=5, le=100),
+):
+    filtros = []
+    if estado:
+        filtros.append(SolicitudEquipo.estado == estado)
+    if solicitante.strip():
+        filtros.append(SolicitudEquipo.solicitante_nombre == solicitante.strip())
+    total = db.scalar(select(func.count()).select_from(SolicitudEquipo).where(*filtros)) or 0
+    items = db.scalars(
+        select(SolicitudEquipo)
+        .where(*filtros)
+        .order_by(SolicitudEquipo.creado_en.desc(), SolicitudEquipo.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).unique().all()
+    return PaginatedSolicitudes(items=items, total=total, page=page, page_size=page_size, pages=max(1, ceil(total / page_size)))
+
+
+@app.get("/api/solicitudes-equipos/{pk}", response_model=SolicitudEquipoOut)
+def solicitud_detalle(pk: int, db: DB):
+    return _obtener(db, SolicitudEquipo, pk, "Solicitud")
+
+
+@app.post("/api/solicitudes-equipos", response_model=SolicitudEquipoOut, status_code=201)
+def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
+    if datos.ubicacion_origen_id == datos.ubicacion_destino_id:
+        raise HTTPException(status_code=400, detail="El origen y el destino deben ser diferentes.")
+    _obtener(db, Ubicacion, datos.ubicacion_origen_id, "Ubicación de origen")
+    _obtener(db, Ubicacion, datos.ubicacion_destino_id, "Ubicación de destino")
+    registro = SolicitudEquipo(
+        codigo=_solicitud_codigo(db),
+        estado="ESPERA_APROBACION",
+        ubicacion_origen_id=datos.ubicacion_origen_id,
+        ubicacion_destino_id=datos.ubicacion_destino_id,
+        fecha_envio=datos.fecha_envio,
+        guia=datos.guia.strip() if datos.guia else None,
+        transportista=datos.transportista.strip() if datos.transportista else None,
+        solicitante_usuario_id=datos.solicitante_usuario_id,
+        solicitante_nombre=datos.solicitante_nombre.strip(),
+        observaciones_salida=datos.observaciones_salida.strip() if datos.observaciones_salida else None,
+        actualizado_en=datetime.now(timezone.utc),
+    )
+    for detalle in datos.detalles:
+        item = _validar_detalle_equipo(db, detalle.inventario_id, detalle.cantidad)
+        registro.detalles.append(SolicitudEquipoDetalle(
+            inventario_id=item.id,
+            cantidad=detalle.cantidad,
+            condicion_salida_id=detalle.condicion_salida_id,
+            calibracion_salida=detalle.calibracion_salida or item.calibracion,
+            observaciones=detalle.observaciones.strip() if detalle.observaciones else None,
+        ))
+    registro.historial.append(SolicitudEquipoHistorial(
+        estado_anterior=None,
+        estado_nuevo="ESPERA_APROBACION",
+        usuario_id=datos.solicitante_usuario_id,
+        usuario_nombre=datos.solicitante_nombre.strip(),
+        comentario="Solicitud registrada por almacén de mina.",
+    ))
+    db.add(registro)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _error_integridad(exc)
+    db.refresh(registro)
+    return registro
+
+
+@app.post("/api/solicitudes-equipos/{pk}/aprobar", response_model=SolicitudEquipoOut)
+def solicitud_aprobar(pk: int, datos: SolicitudTransicion, db: DB):
+    registro = _obtener(db, SolicitudEquipo, pk, "Solicitud")
+    if registro.estado != "ESPERA_APROBACION":
+        raise HTTPException(status_code=409, detail="Solo se pueden aprobar solicitudes en espera.")
+    ahora = datetime.now(timezone.utc)
+    registro.estado = "EN_CAMINO"
+    registro.aprobado_por_usuario_id = datos.usuario_id
+    registro.aprobado_por_nombre = datos.usuario_nombre.strip()
+    registro.fecha_aprobacion = ahora
+    registro.actualizado_en = ahora
+    registro.historial.append(SolicitudEquipoHistorial(
+        estado_anterior="ESPERA_APROBACION", estado_nuevo="EN_CAMINO",
+        usuario_id=datos.usuario_id, usuario_nombre=datos.usuario_nombre.strip(),
+        comentario=datos.comentario.strip() if datos.comentario else "Solicitud aprobada por Logística Lima.",
+    ))
+    db.commit(); db.refresh(registro)
+    return registro
+
+
+@app.post("/api/solicitudes-equipos/{pk}/recibir", response_model=SolicitudEquipoOut)
+def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
+    registro = _obtener(db, SolicitudEquipo, pk, "Solicitud")
+    if registro.estado != "EN_CAMINO":
+        raise HTTPException(status_code=409, detail="Solo se pueden recibir solicitudes en camino.")
+    detalles = {detalle.id: detalle for detalle in registro.detalles}
+    for recibido in datos.detalles:
+        detalle = detalles.get(recibido.detalle_id)
+        if detalle is None:
+            raise HTTPException(status_code=400, detail="El detalle recibido no pertenece a la solicitud.")
+        detalle.condicion_recepcion_id = recibido.condicion_recepcion_id
+        detalle.calibracion_recepcion = recibido.calibracion_recepcion
+    ahora = datetime.now(timezone.utc)
+    registro.estado = "RECIBIDO"
+    registro.recibido_por_usuario_id = datos.usuario_id
+    registro.recibido_por_nombre = datos.usuario_nombre.strip()
+    registro.fecha_recepcion = ahora
+    registro.observaciones_recepcion = datos.comentario.strip() if datos.comentario else None
+    registro.actualizado_en = ahora
+    registro.historial.append(SolicitudEquipoHistorial(
+        estado_anterior="EN_CAMINO", estado_nuevo="RECIBIDO",
+        usuario_id=datos.usuario_id, usuario_nombre=datos.usuario_nombre.strip(),
+        comentario=datos.comentario.strip() if datos.comentario else "Equipo recibido en Lima.",
+    ))
+    db.commit(); db.refresh(registro)
+    return registro
 
 
 @app.get("/api/catalogos/categorias", response_model=list[CatalogoBase])

@@ -11,10 +11,10 @@ export function ViewPreviewPage({ role, onRoleChange, navigate }: { role: ViewRo
       </div>
       <div className="role-preview-content">
         <span className="role-preview-icon">{logistics ? 'L' : 'M'}</span>
-        <div><p className="eyebrow">Perfil activo en esta pestaña</p><h2>{logistics ? 'Control administrativo completo' : 'Consulta operativa restringida'}</h2><p>{logistics ? 'Puede administrar inventario, movimientos y catálogos. Próximamente también aprobará y recibirá envíos de equipos.' : 'Puede consultar el inventario sin editarlo. Próximamente podrá crear y revisar únicamente sus solicitudes de envío.'}</p></div>
+        <div><p className="eyebrow">Perfil activo en esta pestaña</p><h2>{logistics ? 'Control administrativo completo' : 'Consulta operativa restringida'}</h2><p>{logistics ? 'Puede administrar inventario, movimientos y catálogos, además de aprobar y recibir envíos de equipos.' : 'Puede consultar el inventario sin editarlo, crear solicitudes de equipos y seguir sus propios envíos.'}</p></div>
       </div>
       <div className="role-capabilities">
-        {(logistics ? ['Administrar inventario', 'Registrar movimientos', 'Configurar catálogos', 'Aprobar y recibir equipos (próximamente)'] : ['Consultar inventario', 'Crear solicitudes propias (próximamente)', 'Adjuntar constancias (próximamente)', 'Seguir sus envíos (próximamente)']).map((item) => <div key={item}><span>✓</span>{item}</div>)}
+        {(logistics ? ['Administrar inventario', 'Registrar movimientos', 'Configurar catálogos', 'Aprobar y recibir equipos'] : ['Consultar inventario', 'Crear solicitudes propias', 'Seguir sus envíos', 'Adjuntar constancias (próximamente)']).map((item) => <div key={item}><span>✓</span>{item}</div>)}
       </div>
       <div className="role-preview-actions"><button className="btn btn-primary" onClick={() => navigate('inventario')}>Abrir inventario {logistics ? 'administrable' : 'en solo lectura'}</button></div>
     </section>

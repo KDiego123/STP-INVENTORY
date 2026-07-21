@@ -70,6 +70,51 @@ export type Movimiento = {
   ubicacion_destino: Ubicacion | null
 }
 
+export type EstadoSolicitud = 'ESPERA_APROBACION' | 'EN_CAMINO' | 'RECIBIDO'
+
+export type SolicitudEquipoDetalle = {
+  id: number
+  cantidad: string
+  calibracion_salida: Inventario['calibracion']
+  calibracion_recepcion: Inventario['calibracion']
+  observaciones: string | null
+  inventario: Inventario
+  condicion_salida: Catalogo | null
+  condicion_recepcion: Catalogo | null
+}
+
+export type SolicitudEquipoHistorial = {
+  id: number
+  estado_anterior: EstadoSolicitud | null
+  estado_nuevo: EstadoSolicitud
+  usuario_id: number | null
+  usuario_nombre: string
+  comentario: string | null
+  creado_en: string
+}
+
+export type SolicitudEquipo = {
+  id: number
+  codigo: string
+  estado: EstadoSolicitud
+  fecha_envio: string
+  guia: string | null
+  transportista: string | null
+  solicitante_usuario_id: number | null
+  solicitante_nombre: string
+  aprobado_por_nombre: string | null
+  fecha_aprobacion: string | null
+  recibido_por_nombre: string | null
+  fecha_recepcion: string | null
+  observaciones_salida: string | null
+  observaciones_recepcion: string | null
+  creado_en: string
+  ubicacion_origen: Ubicacion
+  ubicacion_destino: Ubicacion
+  detalles: SolicitudEquipoDetalle[]
+  historial: SolicitudEquipoHistorial[]
+}
+
 export type Paginated<T> = {
   items: T[]
   total: number

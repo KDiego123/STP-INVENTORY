@@ -3,16 +3,18 @@ import { CatalogPage } from './pages/CatalogPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InventoryPage } from './pages/InventoryPage'
 import { MovementsPage } from './pages/MovementsPage'
+import { EquipmentRequestsPage } from './pages/EquipmentRequestsPage'
 import { ViewPreviewPage } from './pages/ViewPreviewPage'
 import { Toast } from './components'
 
-export type PageKey = 'vista' | 'inicio' | 'inventario' | 'movimientos' | 'categorias' | 'unidades' | 'ubicaciones' | 'condiciones'
+export type PageKey = 'vista' | 'inicio' | 'inventario' | 'solicitudes' | 'movimientos' | 'categorias' | 'unidades' | 'ubicaciones' | 'condiciones'
 export type ViewRole = 'logistica' | 'almacenero'
 
 const navItems: Array<{ key: PageKey; label: string; icon: string; group?: string; roles?: ViewRole[] }> = [
   { key: 'vista', label: 'Vista de prueba', icon: '◉' },
   { key: 'inicio', label: 'Inicio', icon: '⌂' },
   { key: 'inventario', label: 'Inventario', icon: '▦' },
+  { key: 'solicitudes', label: 'Solicitudes de equipos', icon: '⇢' },
   { key: 'movimientos', label: 'Movimientos', icon: '⇄', roles: ['logistica'] },
   { key: 'categorias', label: 'Categorías', icon: '◇', group: 'Configuración', roles: ['logistica'] },
   { key: 'unidades', label: 'Unidades', icon: '⌁', roles: ['logistica'] },
@@ -66,7 +68,7 @@ export default function App() {
           <button className={`nav-link ${page === item.key ? 'active' : ''}`} onClick={() => navigate(item.key)}>
             <span>{item.icon}</span>{item.label}
           </button>
-          {index === 3 && <div className="nav-separator" />}
+          {item.key === 'movimientos' && <div className="nav-separator" />}
         </div>)}
       </nav>
       <div className="sidebar-footer"><span className="status-dot" /><div><strong>Acceso local</strong><small>Autenticación desactivada</small></div></div>
@@ -83,6 +85,7 @@ export default function App() {
         {page === 'vista' && <ViewPreviewPage role={viewRole} onRoleChange={changeViewRole} navigate={navigate} />}
         {page === 'inicio' && (viewRole === 'logistica' ? <DashboardPage navigate={navigate} /> : <ViewPreviewPage role={viewRole} onRoleChange={changeViewRole} navigate={navigate} />)}
         {page === 'inventario' && <InventoryPage notify={notify} readOnly={viewRole === 'almacenero'} />}
+        {page === 'solicitudes' && <EquipmentRequestsPage role={viewRole} notify={notify} />}
         {page === 'movimientos' && viewRole === 'logistica' && <MovementsPage notify={notify} />}
         {viewRole === 'logistica' && (['categorias', 'unidades', 'ubicaciones', 'condiciones'] as PageKey[]).includes(page) &&
           <CatalogPage type={page as 'categorias' | 'unidades' | 'ubicaciones' | 'condiciones'} notify={notify} />}
