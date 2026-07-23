@@ -108,6 +108,12 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .signature-pad canvas { display: block; width: 100%; height: 150px; background: linear-gradient(white, #fcfdfd); cursor: crosshair; touch-action: none; }
 .signature-line { position: absolute; right: 12%; bottom: 21px; left: 12%; padding-top: 4px; border-top: 1px solid #afc0c7; color: #8a9aa2; font-size: 8px; text-align: center; pointer-events: none; }
 .signature-ready { margin: 0; padding: 8px 10px; border-radius: 8px; color: #176854; background: #e9f6f1; font-size: 10px; font-weight: 700; }
+.processing-backdrop { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 20px; background: rgba(8, 29, 42, .64); backdrop-filter: blur(5px); }
+.processing-card { width: min(390px, 100%); display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; padding: 22px; border: 1px solid rgba(255,255,255,.7); border-radius: 15px; background: white; box-shadow: 0 24px 70px rgba(4, 22, 34, .32); animation: modal-in .18s ease; }
+.processing-spinner { width: 43px; height: 43px; border: 4px solid #d9e8e9; border-top-color: var(--teal); border-right-color: #2a9b91; border-radius: 50%; animation: processing-spin .75s linear infinite; }
+@keyframes processing-spin { to { transform: rotate(360deg); } }
+.processing-card > div { min-width: 0; }.processing-card strong { color: #183d55; font-size: 15px; }.processing-card p { margin: 4px 0 0; color: #58707b; font-size: 11px; }
+.processing-card > small { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid #e7edef; color: #7b8c95; font-size: 9px; text-align: center; }
 .request-files { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .request-files > a { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid #dfe8eb; border-radius: 9px; color: inherit; background: #fbfcfd; text-decoration: none; }
 .request-files > a > span { padding: 6px; border-radius: 6px; color: #a2383e; background: #fbe9ea; font-size: 8px; font-weight: 900; }.request-files > a > div { display: grid; gap: 2px; min-width: 0; }.request-files strong { overflow: hidden; color: #315160; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.request-files small { color: var(--muted); font-size: 9px; }

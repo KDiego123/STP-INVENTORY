@@ -124,6 +124,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [senderSignature, setSenderSignature] = useState<File | null>(null)
   const [createdRequest, setCreatedRequest] = useState<SolicitudEquipo | null>(null)
   const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -145,6 +146,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('')
     try {
+      setProgress(createdRequest ? 'Reanudando la carga de archivos…' : 'Creando la solicitud…')
       const solicitud = createdRequest ?? await equipmentRequestsApi.create({
         ubicacion_origen_id: Number(form.ubicacion_origen_id),
         ubicacion_destino_id: Number(form.ubicacion_destino_id),
@@ -168,20 +170,25 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         })),
       })
       if (!createdRequest) setCreatedRequest(solicitud)
-      for (const document of [...documents]) {
+      const pendingDocuments = [...documents]
+      for (const [index, document] of pendingDocuments.entries()) {
+        setProgress(`Subiendo PDF ${index + 1} de ${pendingDocuments.length}…`)
         await equipmentRequestsApi.uploadFile(solicitud.id, 'DOCUMENTO', document, MINE_ACTOR)
         setDocuments((current) => current.filter((item) => item !== document))
       }
       if (senderSignature) {
+        setProgress('Guardando la firma del remitente…')
         await equipmentRequestsApi.uploadFile(solicitud.id, 'FIRMA_REMITENTE', senderSignature, MINE_ACTOR)
         setSenderSignature(null)
       }
+      setProgress('Finalizando el registro…')
       await onSaved()
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la solicitud.') }
-    finally { setSaving(false) }
+    finally { setSaving(false); setProgress('') }
   }
 
-  return <Modal wide title="Nueva solicitud de equipo" subtitle="Registra equipos nuevos enviados desde Mina; Logística los incorporará al recibirlos." onClose={onClose}>
+  return <>{saving && <ProcessingOverlay title="Registrando solicitud" detail={progress || 'Procesando información…'} />}
+  <Modal wide title="Nueva solicitud de equipo" subtitle="Registra equipos nuevos enviados desde Mina; Logística los incorporará al recibirlos." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
     <form className="request-create-form" onSubmit={submit}>
       <div className="form-grid">
@@ -231,6 +238,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
     </form>
   </Modal>
+  </>
 }
 
 function RequestDetail({ item, mine, onClose, onApprove, onReceive }: {
@@ -306,6 +314,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
   const [receiverSignature, setReceiverSignature] = useState<File | null>(null)
   const [signatureUploaded, setSignatureUploaded] = useState(item.archivos.some((file) => file.tipo === 'FIRMA_RECEPTOR'))
   const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -323,9 +332,11 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
     event.preventDefault(); setSaving(true); setError('')
     try {
       if (receiverSignature && !signatureUploaded) {
+        setProgress('Guardando la firma del receptor…')
         await equipmentRequestsApi.uploadFile(item.id, 'FIRMA_RECEPTOR', receiverSignature, LIMA_ACTOR)
         setSignatureUploaded(true)
       }
+      setProgress('Actualizando inventario y movimientos…')
       await equipmentRequestsApi.receive(item.id, {
         usuario_nombre: LIMA_ACTOR,
         comentario: comment.trim() || null,
@@ -339,12 +350,14 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
           fecha_calibracion_recepcion: entries[detail.id].fecha_calibracion || null,
         })),
       })
+      setProgress('Finalizando la recepción…')
       await onSaved()
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la recepción.') }
-    finally { setSaving(false) }
+    finally { setSaving(false); setProgress('') }
   }
 
-  return <Modal wide title={`Recibir ${item.codigo}`} subtitle="Confirma los datos y crea o vincula cada equipo en el inventario de Lima." onClose={onClose}>
+  return <>{saving && <ProcessingOverlay title="Procesando recepción" detail={progress || 'Procesando información…'} />}
+  <Modal wide title={`Recibir ${item.codigo}`} subtitle="Confirma los datos y crea o vincula cada equipo en el inventario de Lima." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
     <form className="receive-form" onSubmit={submit}>
       {item.detalles.map((detail) => {
@@ -377,6 +390,17 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
       <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Confirmando…' : 'Confirmar recepción e ingreso'}</button></div>
     </form>
   </Modal>
+  </>
+}
+
+function ProcessingOverlay({ title, detail }: { title: string; detail: string }) {
+  return <div className="processing-backdrop" role="status" aria-live="polite" aria-busy="true">
+    <div className="processing-card">
+      <span className="processing-spinner" aria-hidden="true" />
+      <div><strong>{title}</strong><p>{detail}</p></div>
+      <small>No cierres esta ventana mientras termina la operación.</small>
+    </div>
+  </div>
 }
 
 function Field({ label, required, className = '', children }: { label: string; required?: boolean; className?: string; children: React.ReactNode }) {
