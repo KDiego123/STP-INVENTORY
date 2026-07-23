@@ -56,6 +56,8 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 15px; border: 1px solid transparent; border-radius: 9px; font-weight: 700; font-size: 13px; transition: .15s ease; }
 .btn-primary { color: white; background: linear-gradient(135deg, #167d78, #196b73); box-shadow: 0 7px 18px rgba(21, 121, 115, .18); }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 9px 22px rgba(21, 121, 115, .25); }
+.btn-danger { color: white; background: linear-gradient(135deg, #bd4147, #a8323a); box-shadow: 0 7px 18px rgba(185, 56, 62, .18); }
+.btn-danger:hover { transform: translateY(-1px); box-shadow: 0 9px 22px rgba(185, 56, 62, .25); }
 .btn-secondary { color: #284757; background: white; border-color: #ccd9e0; }
 .btn-secondary:hover, .btn-ghost:hover { background: #eef4f6; }
 .btn-ghost { color: #4b6472; background: transparent; }
@@ -128,6 +130,15 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .inventory-detail-value.wide { grid-column: 1 / -1; border-right: 0; }
 .inventory-detail-value small { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .inventory-detail-value strong { overflow-wrap: anywhere; color: #2c4a59; font-size: 11px; line-height: 1.45; }
+.inventory-status-confirmation { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+.inventory-status-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: white; background: linear-gradient(145deg, #c94d54, #a9323a); box-shadow: 0 8px 20px rgba(185, 56, 62, .2); font-size: 24px; font-weight: 800; }
+.inventory-status-confirmation.activate .inventory-status-icon { background: linear-gradient(145deg, #269879, #17705e); box-shadow: 0 8px 20px rgba(23, 112, 94, .2); }
+.inventory-status-confirmation h3 { margin: 9px 0 4px; color: #183d55; font-size: 17px; }
+.inventory-status-confirmation p { margin: 0; color: #5b707b; font-size: 11px; }
+.inventory-status-notice { margin: 18px 0 2px; padding: 13px 14px; border: 1px solid #efc9cc; border-radius: 10px; color: #7e3035; background: #fdf0f1; }
+.inventory-status-notice.activate { border-color: #bedfd5; color: #236654; background: #eef8f4; }
+.inventory-status-notice strong { display: block; font-size: 12px; }
+.inventory-status-notice p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; }
 .approval-confirmation { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
 .approval-confirmation-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: white; background: linear-gradient(145deg, #198f88, #116e72); box-shadow: 0 8px 20px rgba(20, 124, 120, .22); font-size: 23px; font-weight: 800; }
 .approval-confirmation h3 { margin: 10px 0 5px; color: #183d55; font-size: 17px; }

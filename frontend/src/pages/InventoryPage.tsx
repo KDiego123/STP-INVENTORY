@@ -29,6 +29,8 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Inventario | null>(null)
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
+  const [statusPending, setStatusPending] = useState<Inventario | null>(null)
+  const [changingStatus, setChangingStatus] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -53,10 +55,17 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     setApplied(next)
     setPage(1)
   }
-  const toggle = async (item: Inventario) => {
-    if (!window.confirm(`¿Deseas ${item.activo ? 'desactivar' : 'activar'} ${item.codigo}?`)) return
-    try { await inventoryApi.toggle(item.id); notify(`Artículo ${item.activo ? 'desactivado' : 'activado'} correctamente.`); await load() }
+  const toggle = async () => {
+    if (!statusPending) return
+    setChangingStatus(true)
+    try {
+      await inventoryApi.toggle(statusPending.id)
+      notify(`Artículo ${statusPending.activo ? 'desactivado' : 'activado'} correctamente.`)
+      setStatusPending(null)
+      await load()
+    }
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo cambiar el estado.', 'error') }
+    finally { setChangingStatus(false) }
   }
 
   return <>
@@ -98,7 +107,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             <td><span className="tag">{item.categoria.nombre}</span></td><td><span className="location-code">{item.ubicacion.codigo}</span></td>
             <td className={`numeric ${low ? 'text-danger' : ''}`}><strong>{formatNumber(item.stock_actual)}</strong><small>{item.unidad_medida.codigo}</small></td>
             <td>{item.condicion?.nombre ?? '—'}</td><td>{item.calibracion ? <><span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span>{item.fecha_calibracion && <small className="calibration-date">{formatDate(item.fecha_calibracion)}</small>}</> : '—'}</td><td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>{low && <span className="badge badge-danger">Stock bajo</span>}</td>
-            {!readOnly && <td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); void toggle(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></td>}
+            {!readOnly && <td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></td>}
           </tr>})}</tbody></table></div>
       {!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}
       {data && data.pages > 1 && <div className="pagination"><span>Página {data.page} de {data.pages}</span><div><button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Anterior</button><button className="btn btn-secondary btn-sm" disabled={page >= data.pages} onClick={() => setPage(page + 1)}>Siguiente →</button></div></div>}
@@ -109,8 +118,50 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
       onClose={() => setSelected(null)}
       onEdit={() => { setSelected(null); setEditing(selected) }}
     />}
+    {statusPending && <InventoryStatusConfirmation
+      item={statusPending}
+      saving={changingStatus}
+      onClose={() => !changingStatus && setStatusPending(null)}
+      onConfirm={() => void toggle()}
+    />}
     {editing && <InventoryForm item={editing === 'new' ? null : editing} options={options} onClose={() => setEditing(null)} onSaved={async (message) => { setEditing(null); notify(message); await load() }} />}
   </>
+}
+
+function InventoryStatusConfirmation({ item, saving, onClose, onConfirm }: {
+  item: Inventario
+  saving: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const deactivating = item.activo
+  return <Modal
+    title={deactivating ? 'Desactivar artículo' : 'Activar artículo'}
+    subtitle="Confirma el cambio de estado del inventario."
+    onClose={onClose}
+  >
+    <div className={`inventory-status-confirmation ${deactivating ? 'deactivate' : 'activate'}`}>
+      <div className="inventory-status-icon" aria-hidden="true">{deactivating ? '–' : '✓'}</div>
+      <div>
+        <span className={`badge ${deactivating ? 'badge-danger' : 'badge-success'}`}>{deactivating ? 'Desactivar' : 'Activar'}</span>
+        <h3>{deactivating ? `¿Desactivar ${item.codigo}?` : `¿Activar ${item.codigo}?`}</h3>
+        <p><strong>{item.descripcion}</strong></p>
+      </div>
+    </div>
+    {deactivating ? <div className="inventory-status-notice">
+      <strong>Este artículo no será eliminado.</strong>
+      <p>Sus datos y movimientos se conservarán. Dejará de aparecer entre los artículos activos y podrás reactivarlo desde el filtro “Inactivos” o “Todos”.</p>
+    </div> : <div className="inventory-status-notice activate">
+      <strong>El artículo volverá a estar disponible.</strong>
+      <p>Aparecerá nuevamente en el inventario activo sin perder ningún dato ni movimiento anterior.</p>
+    </div>}
+    <div className="form-actions">
+      <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
+      <button type="button" className={`btn ${deactivating ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={saving}>
+        {saving ? 'Procesando…' : deactivating ? 'Sí, desactivar' : 'Sí, activar'}
+      </button>
+    </div>
+  </Modal>
 }
 
 function InventoryDetail({ item, readOnly, onClose, onEdit }: {
