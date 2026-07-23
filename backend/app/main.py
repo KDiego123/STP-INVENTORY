@@ -166,6 +166,10 @@ def inventario_listar(
             or_(
                 Inventario.codigo.ilike(patron),
                 Inventario.descripcion.ilike(patron),
+                Inventario.marca.ilike(patron),
+                Inventario.modelo.ilike(patron),
+                Inventario.numero_serie.ilike(patron),
+                Inventario.codigo_patrimonial.ilike(patron),
                 Inventario.observaciones.ilike(patron),
             )
         )
@@ -204,8 +208,7 @@ def inventario_listar(
     )
 
 
-@app.get("/api/inventario/siguiente-codigo")
-def inventario_siguiente_codigo(db: DB):
+def _siguiente_codigo_inventario(db: Session) -> str:
     codigos = db.scalars(
         select(Inventario.codigo).where(Inventario.codigo.like("LIMA-%"))
     ).all()
@@ -214,7 +217,12 @@ def inventario_siguiente_codigo(db: DB):
         sufijo = codigo.removeprefix("LIMA-")
         if sufijo.isdigit():
             numeros.append(int(sufijo))
-    return {"codigo": f"LIMA-{max(numeros, default=0) + 1:04d}"}
+    return f"LIMA-{max(numeros, default=0) + 1:04d}"
+
+
+@app.get("/api/inventario/siguiente-codigo")
+def inventario_siguiente_codigo(db: DB):
+    return {"codigo": _siguiente_codigo_inventario(db)}
 
 
 @app.get("/api/inventario/{pk}", response_model=InventarioOut)
@@ -462,15 +470,11 @@ def _solicitud_codigo(db: Session) -> str:
     return f"ENV-{datetime.now().year}-{ultimo + 1:05d}"
 
 
-def _validar_detalle_equipo(db: Session, inventario_id: int, cantidad: Decimal):
-    item = _obtener(db, Inventario, inventario_id, "Equipo")
-    if item.categoria.nombre.strip().upper() != "EQUIPOS":
-        raise HTTPException(status_code=400, detail=f"{item.codigo} no pertenece a la categoría EQUIPOS.")
-    if not item.activo:
-        raise HTTPException(status_code=400, detail=f"{item.codigo} está inactivo.")
-    if cantidad > item.stock_actual:
-        raise HTTPException(status_code=400, detail=f"Stock insuficiente para {item.codigo}.")
-    return item
+def _validar_catalogo_activo(db: Session, modelo, pk: int, nombre: str):
+    registro = _obtener(db, modelo, pk, nombre)
+    if not registro.activo:
+        raise HTTPException(status_code=400, detail=f"{nombre} inactiva.")
+    return registro
 
 
 @app.get("/api/solicitudes-equipos", response_model=PaginatedSolicitudes)
@@ -506,8 +510,8 @@ def solicitud_detalle(pk: int, db: DB):
 def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
     if datos.ubicacion_origen_id == datos.ubicacion_destino_id:
         raise HTTPException(status_code=400, detail="El origen y el destino deben ser diferentes.")
-    _obtener(db, Ubicacion, datos.ubicacion_origen_id, "Ubicación de origen")
-    _obtener(db, Ubicacion, datos.ubicacion_destino_id, "Ubicación de destino")
+    _validar_catalogo_activo(db, Ubicacion, datos.ubicacion_origen_id, "Ubicación de origen")
+    _validar_catalogo_activo(db, Ubicacion, datos.ubicacion_destino_id, "Ubicación de destino")
     registro = SolicitudEquipo(
         codigo=_solicitud_codigo(db),
         estado="ESPERA_APROBACION",
@@ -522,13 +526,41 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
         actualizado_en=datetime.now(timezone.utc),
     )
     for detalle in datos.detalles:
-        item = _validar_detalle_equipo(db, detalle.inventario_id, detalle.cantidad)
+        unidad = _validar_catalogo_activo(
+            db, UnidadMedida, detalle.unidad_medida_id, "Unidad de medida"
+        )
+        if unidad.permite_decimal:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La unidad {unidad.codigo} no corresponde a equipos enteros.",
+            )
+        if detalle.cantidad > 1 and (
+            detalle.numero_serie or detalle.codigo_patrimonial
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Registre {detalle.nombre_equipo} en líneas separadas porque "
+                    "sus unidades tienen identificación individual."
+                ),
+            )
+        if detalle.condicion_salida_id is not None:
+            _validar_catalogo_activo(
+                db, Condicion, detalle.condicion_salida_id, "Condición de salida"
+            )
         registro.detalles.append(SolicitudEquipoDetalle(
-            inventario_id=item.id,
+            inventario_id=None,
+            nombre_equipo=detalle.nombre_equipo,
+            marca=detalle.marca,
+            modelo=detalle.modelo,
+            numero_serie=detalle.numero_serie,
+            codigo_patrimonial=detalle.codigo_patrimonial,
+            unidad_medida_id=detalle.unidad_medida_id,
             cantidad=detalle.cantidad,
             condicion_salida_id=detalle.condicion_salida_id,
-            calibracion_salida=detalle.calibracion_salida or item.calibracion,
-            observaciones=detalle.observaciones.strip() if detalle.observaciones else None,
+            calibracion_salida=detalle.calibracion_salida,
+            fecha_calibracion_salida=detalle.fecha_calibracion_salida,
+            observaciones=detalle.observaciones,
         ))
     registro.historial.append(SolicitudEquipoHistorial(
         estado_anterior=None,
@@ -549,7 +581,11 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
 
 @app.post("/api/solicitudes-equipos/{pk}/aprobar", response_model=SolicitudEquipoOut)
 def solicitud_aprobar(pk: int, datos: SolicitudTransicion, db: DB):
-    registro = _obtener(db, SolicitudEquipo, pk, "Solicitud")
+    registro = db.scalar(
+        select(SolicitudEquipo).where(SolicitudEquipo.id == pk).with_for_update()
+    )
+    if registro is None:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada.")
     if registro.estado != "ESPERA_APROBACION":
         raise HTTPException(status_code=409, detail="Solo se pueden aprobar solicitudes en espera.")
     ahora = datetime.now(timezone.utc)
@@ -569,30 +605,226 @@ def solicitud_aprobar(pk: int, datos: SolicitudTransicion, db: DB):
 
 @app.post("/api/solicitudes-equipos/{pk}/recibir", response_model=SolicitudEquipoOut)
 def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
-    registro = _obtener(db, SolicitudEquipo, pk, "Solicitud")
-    if registro.estado != "EN_CAMINO":
-        raise HTTPException(status_code=409, detail="Solo se pueden recibir solicitudes en camino.")
-    detalles = {detalle.id: detalle for detalle in registro.detalles}
-    for recibido in datos.detalles:
-        detalle = detalles.get(recibido.detalle_id)
-        if detalle is None:
-            raise HTTPException(status_code=400, detail="El detalle recibido no pertenece a la solicitud.")
-        detalle.condicion_recepcion_id = recibido.condicion_recepcion_id
-        detalle.calibracion_recepcion = recibido.calibracion_recepcion
-    ahora = datetime.now(timezone.utc)
-    registro.estado = "RECIBIDO"
-    registro.recibido_por_usuario_id = datos.usuario_id
-    registro.recibido_por_nombre = datos.usuario_nombre.strip()
-    registro.fecha_recepcion = ahora
-    registro.observaciones_recepcion = datos.comentario.strip() if datos.comentario else None
-    registro.actualizado_en = ahora
-    registro.historial.append(SolicitudEquipoHistorial(
-        estado_anterior="EN_CAMINO", estado_nuevo="RECIBIDO",
-        usuario_id=datos.usuario_id, usuario_nombre=datos.usuario_nombre.strip(),
-        comentario=datos.comentario.strip() if datos.comentario else "Equipo recibido en Lima.",
-    ))
-    db.commit(); db.refresh(registro)
-    return registro
+    try:
+        registro = db.scalar(
+            select(SolicitudEquipo).where(SolicitudEquipo.id == pk).with_for_update()
+        )
+        if registro is None:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada.")
+        if registro.estado != "EN_CAMINO":
+            raise HTTPException(status_code=409, detail="Solo se pueden recibir solicitudes en camino.")
+
+        detalles = {detalle.id: detalle for detalle in registro.detalles}
+        recibidos = {detalle.detalle_id: detalle for detalle in datos.detalles}
+        if len(recibidos) != len(datos.detalles):
+            raise HTTPException(status_code=400, detail="Hay equipos repetidos en la recepción.")
+        if set(recibidos) != set(detalles):
+            raise HTTPException(
+                status_code=400,
+                detail="Debe confirmar la recepción de todos los equipos de la solicitud.",
+            )
+
+        categoria = db.scalar(
+            select(Categoria).where(
+                func.upper(func.trim(Categoria.nombre)) == "EQUIPOS",
+                Categoria.activo,
+            )
+        )
+        if categoria is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No existe una categoría EQUIPOS activa para registrar el ingreso.",
+            )
+        tipo_entrada = db.scalar(
+            select(TipoMovimiento).where(
+                TipoMovimiento.codigo == "ENTRADA",
+                TipoMovimiento.activo,
+            )
+        )
+        if tipo_entrada is None or tipo_entrada.signo_stock != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="No existe un tipo de movimiento ENTRADA activo y correctamente configurado.",
+            )
+        destino = _validar_catalogo_activo(
+            db, Ubicacion, registro.ubicacion_destino_id, "Ubicación de destino"
+        )
+        ahora = datetime.now(timezone.utc)
+
+        for detalle_id, recibido in recibidos.items():
+            detalle = detalles[detalle_id]
+            calibracion_final = (
+                recibido.calibracion_recepcion or detalle.calibracion_salida
+            )
+            fecha_calibracion_final = (
+                (
+                    recibido.fecha_calibracion_recepcion
+                    or detalle.fecha_calibracion_salida
+                )
+                if calibracion_final == "CALIBRADO"
+                else None
+            )
+            if recibido.condicion_recepcion_id is not None:
+                _validar_catalogo_activo(
+                    db,
+                    Condicion,
+                    recibido.condicion_recepcion_id,
+                    "Condición de recepción",
+                )
+
+            if recibido.accion_inventario == "VINCULAR":
+                inventario = db.scalar(
+                    select(Inventario)
+                    .where(Inventario.id == recibido.inventario_id)
+                    .with_for_update()
+                )
+                if inventario is None or not inventario.activo:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Artículo para {detalle.nombre_equipo} no encontrado o inactivo.",
+                    )
+                if inventario.categoria.nombre.strip().upper() != "EQUIPOS":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{inventario.codigo} no pertenece a la categoría EQUIPOS.",
+                    )
+                if inventario.unidad_medida_id != detalle.unidad_medida_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"{inventario.codigo} usa la unidad "
+                            f"{inventario.unidad_medida.codigo}, distinta al preingreso."
+                        ),
+                    )
+                if inventario.ubicacion_id != destino.id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"{inventario.codigo} está en {inventario.ubicacion.codigo}; "
+                            f"la recepción corresponde a {destino.codigo}."
+                        ),
+                    )
+            else:
+                unidad = _validar_catalogo_activo(
+                    db, UnidadMedida, detalle.unidad_medida_id, "Unidad de medida"
+                )
+                if unidad.permite_decimal:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"La unidad {unidad.codigo} no corresponde a equipos enteros.",
+                    )
+                identificadores = []
+                if detalle.numero_serie:
+                    identificadores.append(
+                        func.upper(Inventario.numero_serie)
+                        == detalle.numero_serie.upper()
+                    )
+                if detalle.codigo_patrimonial:
+                    identificadores.append(
+                        func.upper(Inventario.codigo_patrimonial)
+                        == detalle.codigo_patrimonial.upper()
+                    )
+                if identificadores:
+                    duplicado = db.scalar(
+                        select(Inventario).where(or_(*identificadores)).limit(1)
+                    )
+                    if duplicado is not None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                f"El equipo coincide con {duplicado.codigo}. "
+                                "Vincule el artículo existente o revise sus identificadores."
+                            ),
+                        )
+                inventario = Inventario(
+                    codigo=recibido.codigo_inventario or _siguiente_codigo_inventario(db),
+                    descripcion=detalle.nombre_equipo,
+                    categoria_id=categoria.id,
+                    unidad_medida_id=unidad.id,
+                    ubicacion_id=destino.id,
+                    condicion_id=(
+                        recibido.condicion_recepcion_id or detalle.condicion_salida_id
+                    ),
+                    stock_actual=Decimal("0"),
+                    stock_minimo=None,
+                    costo_unitario=None,
+                    fecha_ultima_entrada=ahora.date(),
+                    calibracion=calibracion_final,
+                    fecha_calibracion=fecha_calibracion_final,
+                    marca=detalle.marca,
+                    modelo=detalle.modelo,
+                    numero_serie=detalle.numero_serie,
+                    codigo_patrimonial=detalle.codigo_patrimonial,
+                    observaciones=detalle.observaciones,
+                    activo=True,
+                    actualizado_en=ahora,
+                )
+                db.add(inventario)
+                db.flush()
+
+            cantidad = Decimal(detalle.cantidad)
+            stock_anterior = inventario.stock_actual
+            stock_posterior = stock_anterior + cantidad
+            inventario.stock_actual = stock_posterior
+            inventario.fecha_ultima_entrada = ahora.date()
+            inventario.condicion_id = (
+                recibido.condicion_recepcion_id or inventario.condicion_id
+            )
+            inventario.calibracion = calibracion_final or inventario.calibracion
+            inventario.fecha_calibracion = (
+                fecha_calibracion_final
+                if calibracion_final is not None
+                else inventario.fecha_calibracion
+            )
+            inventario.actualizado_en = ahora
+
+            detalle.inventario_id = inventario.id
+            detalle.inventario = inventario
+            detalle.condicion_recepcion_id = recibido.condicion_recepcion_id
+            detalle.calibracion_recepcion = recibido.calibracion_recepcion
+            detalle.fecha_calibracion_recepcion = recibido.fecha_calibracion_recepcion
+            db.add(
+                Movimiento(
+                    fecha=ahora,
+                    tipo_movimiento_id=tipo_entrada.id,
+                    inventario_id=inventario.id,
+                    cantidad=cantidad,
+                    stock_anterior=stock_anterior,
+                    stock_posterior=stock_posterior,
+                    ubicacion_origen_id=None,
+                    ubicacion_destino_id=destino.id,
+                    responsable=datos.usuario_nombre.strip(),
+                    motivo="Recepción de equipo enviado desde Mina.",
+                    documento=registro.codigo,
+                    observaciones=datos.comentario.strip() if datos.comentario else None,
+                    anulado=False,
+                )
+            )
+
+        registro.estado = "RECIBIDO"
+        registro.recibido_por_usuario_id = datos.usuario_id
+        registro.recibido_por_nombre = datos.usuario_nombre.strip()
+        registro.fecha_recepcion = ahora
+        registro.observaciones_recepcion = datos.comentario.strip() if datos.comentario else None
+        registro.actualizado_en = ahora
+        registro.historial.append(SolicitudEquipoHistorial(
+            estado_anterior="EN_CAMINO", estado_nuevo="RECIBIDO",
+            usuario_id=datos.usuario_id, usuario_nombre=datos.usuario_nombre.strip(),
+            comentario=(
+                datos.comentario.strip()
+                if datos.comentario
+                else "Equipos recibidos e incorporados al inventario de Lima."
+            ),
+        ))
+        db.commit()
+        db.refresh(registro)
+        return registro
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        _error_integridad(exc)
 
 
 @app.get("/api/catalogos/categorias", response_model=list[CatalogoBase])

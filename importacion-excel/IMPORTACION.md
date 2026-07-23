@@ -38,6 +38,15 @@ Si el script se ejecuta directamente dentro del servidor de PostgreSQL, usar
 `DB_HOST=localhost`. Antes de importar se debe ejecutar
 `001_esquema_inicial.sql` sobre `inventario_db`.
 
+Las ampliaciones de la aplicación se aplican después de `001`, en orden:
+
+```text
+002_calibracion_equipos.sql
+003_fecha_calibracion.sql
+004_solicitudes_equipos.sql
+005_preingreso_equipos.sql
+```
+
 ## 4. Importar
 
 Importar inventario y catalogos, sin fabricar historial de movimientos:

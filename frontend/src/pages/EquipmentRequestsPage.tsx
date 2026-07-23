@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
-import type { Catalogo, Inventario, Paginated, SolicitudEquipo, Ubicacion } from '../types'
+import type { Catalogo, Inventario, Paginated, SolicitudEquipo, Ubicacion, Unidad } from '../types'
 import type { ViewRole } from '../App'
 
 const MINE_ACTOR = 'Almacenero de Mina · Simulación'
@@ -9,9 +9,52 @@ const LIMA_ACTOR = 'Logística Lima · Simulación'
 const stateLabels = { ESPERA_APROBACION: 'Espera de aprobación', EN_CAMINO: 'En camino', RECIBIDO: 'Recibido' } as const
 const calibrationLabels = { NO_CUMPLE: 'No cumple', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
 
+type RequestDetailDraft = {
+  nombre_equipo: string
+  marca: string
+  modelo: string
+  numero_serie: string
+  codigo_patrimonial: string
+  unidad_medida_id: string
+  cantidad: string
+  condicion_salida_id: string
+  calibracion_salida: string
+  fecha_calibracion_salida: string
+  observaciones: string
+}
+
+type ReceptionDraft = {
+  accion: 'CREAR' | 'VINCULAR'
+  inventario_id: string
+  codigo_inventario: string
+  condicion: string
+  calibracion: string
+  fecha_calibracion: string
+}
+
+const newDetail = (unitId = ''): RequestDetailDraft => ({
+  nombre_equipo: '',
+  marca: '',
+  modelo: '',
+  numero_serie: '',
+  codigo_patrimonial: '',
+  unidad_medida_id: unitId,
+  cantidad: '1',
+  condicion_salida_id: '',
+  calibracion_salida: '',
+  fecha_calibracion_salida: '',
+  observaciones: '',
+})
+
 function localDateTime() {
   const now = new Date()
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
+function sequentialCode(base: string, offset: number) {
+  const match = base.match(/^(.*?)(\d+)$/)
+  if (!match) return ''
+  return `${match[1]}${String(Number(match[2]) + offset).padStart(match[2].length, '0')}`
 }
 
 export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify: (message: string, type?: 'success' | 'error') => void }) {
@@ -40,64 +83,194 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
   }
 
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Flujo Mina → Lima</p><h1>Solicitudes de equipos</h1><p>{mine ? 'Registra envíos y sigue el estado de tus solicitudes.' : 'Aprueba envíos pendientes y confirma su recepción en Lima.'}</p></div>{mine && <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ Nueva solicitud</button>}</div>
-    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Solo solicitudes creadas en esta simulación' : 'Todas las solicitudes registradas'}</small></div><label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option></select></label></div>
+    <div className="page-heading"><div><p className="eyebrow">Flujo Mina → Lima</p><h1>Solicitudes de equipos</h1><p>{mine ? 'Registra equipos nuevos y sigue el estado de sus envíos.' : 'Aprueba preingresos y confirma su incorporación al inventario.'}</p></div>{mine && <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ Nueva solicitud</button>}</div>
+    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Tus preingresos simulados' : 'Todas las solicitudes registradas'}</small></div><label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option></select></label></div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> solicitudes encontradas</div>
       <div className="table-responsive"><table><thead><tr><th>Solicitud</th><th>Ruta</th><th>Equipos</th><th>Envío</th><th>Estado</th><th /></tr></thead><tbody>
-        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.inventario.descripcion}</strong><small>{formatNumber(detail.cantidad)} {detail.inventario.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <button className="btn btn-secondary btn-sm" onClick={() => void approve(item)}>Aprobar</button>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir</button>}</td></tr>)}
+        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <button className="btn btn-secondary btn-sm" onClick={() => void approve(item)}>Aprobar</button>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
       </tbody></table></div>
-      {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
+      {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos nuevos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
     </section>}
     {creating && <RequestForm onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); notify('Solicitud enviada a Logística Lima.'); await load() }} />}
     {selected && <RequestDetail item={selected} onClose={() => setSelected(null)} />}
-    {receiving && <ReceiveForm item={receiving} onClose={() => setReceiving(null)} onSaved={async () => { setReceiving(null); notify('Recepción confirmada correctamente.'); await load() }} />}
+    {receiving && <ReceiveForm item={receiving} onClose={() => setReceiving(null)} onSaved={async () => { setReceiving(null); notify('Equipos incorporados al inventario correctamente.'); await load() }} />}
   </>
 }
 
 function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
-  const [options, setOptions] = useState<{ equipment: Inventario[]; locations: Ubicacion[]; conditions: Catalogo[] }>({ equipment: [], locations: [], conditions: [] })
-  const [form, setForm] = useState({ ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', inventario_id: '', cantidad: '1', condicion_salida_id: '', calibracion_salida: '', observaciones_salida: '', observaciones_equipo: '' })
+  const [options, setOptions] = useState<{ locations: Ubicacion[]; conditions: Catalogo[]; units: Unidad[] }>({ locations: [], conditions: [], units: [] })
+  const [form, setForm] = useState({ ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', observaciones_salida: '' })
+  const [details, setDetails] = useState<RequestDetailDraft[]>([newDetail()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { Promise.all([inventoryApi.list({ estado: 'activos', page: 1, page_size: 500 }), catalogsApi.locations(), catalogsApi.conditions()]).then(([inventory, locations, conditions]) => setOptions({ equipment: inventory.items.filter((item) => item.categoria.nombre.trim().toUpperCase() === 'EQUIPOS'), locations, conditions })).catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones.')) }, [])
-  const selectedEquipment = options.equipment.find((item) => item.id === Number(form.inventario_id))
+
+  useEffect(() => {
+    Promise.all([catalogsApi.locations(), catalogsApi.conditions(), catalogsApi.units()])
+      .then(([locations, conditions, units]) => {
+        setOptions({ locations, conditions, units })
+        const unit = units.find((item) => item.codigo.toUpperCase() === 'UND') ?? units.find((item) => !item.permite_decimal)
+        if (unit) setDetails((current) => current.map((item) => item.unidad_medida_id ? item : { ...item, unidad_medida_id: String(unit.id) }))
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones.'))
+  }, [])
+
+  const updateDetail = (index: number, key: keyof RequestDetailDraft, value: string) => {
+    setDetails((current) => current.map((item, position) => position === index ? { ...item, [key]: value } : item))
+  }
+  const addDetail = () => setDetails((current) => [...current, newDetail(current[0]?.unidad_medida_id)])
+  const removeDetail = (index: number) => setDetails((current) => current.filter((_, position) => position !== index))
+
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('')
     try {
-      await equipmentRequestsApi.create({ ubicacion_origen_id: Number(form.ubicacion_origen_id), ubicacion_destino_id: Number(form.ubicacion_destino_id), fecha_envio: new Date(form.fecha_envio).toISOString(), guia: form.guia.trim() || null, transportista: form.transportista.trim() || null, solicitante_nombre: MINE_ACTOR, observaciones_salida: form.observaciones_salida.trim() || null, detalles: [{ inventario_id: Number(form.inventario_id), cantidad: form.cantidad, condicion_salida_id: form.condicion_salida_id ? Number(form.condicion_salida_id) : null, calibracion_salida: form.calibracion_salida || selectedEquipment?.calibracion || null, observaciones: form.observaciones_equipo.trim() || null }] }); await onSaved()
+      await equipmentRequestsApi.create({
+        ubicacion_origen_id: Number(form.ubicacion_origen_id),
+        ubicacion_destino_id: Number(form.ubicacion_destino_id),
+        fecha_envio: new Date(form.fecha_envio).toISOString(),
+        guia: form.guia.trim() || null,
+        transportista: form.transportista.trim() || null,
+        solicitante_nombre: MINE_ACTOR,
+        observaciones_salida: form.observaciones_salida.trim() || null,
+        detalles: details.map((detail) => ({
+          nombre_equipo: detail.nombre_equipo.trim(),
+          marca: detail.marca.trim() || null,
+          modelo: detail.modelo.trim() || null,
+          numero_serie: detail.numero_serie.trim() || null,
+          codigo_patrimonial: detail.codigo_patrimonial.trim() || null,
+          unidad_medida_id: Number(detail.unidad_medida_id),
+          cantidad: Number(detail.cantidad),
+          condicion_salida_id: detail.condicion_salida_id ? Number(detail.condicion_salida_id) : null,
+          calibracion_salida: detail.calibracion_salida || null,
+          fecha_calibracion_salida: detail.fecha_calibracion_salida || null,
+          observaciones: detail.observaciones.trim() || null,
+        })),
+      })
+      await onSaved()
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la solicitud.') }
     finally { setSaving(false) }
   }
-  return <Modal wide title="Nueva solicitud de equipo" subtitle="Registra la constancia inicial del envío desde Mina." onClose={onClose}>{error && <ErrorNotice message={error} />}<form className="form-grid" onSubmit={submit}>
-    <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((x) => <option key={x.id} value={x.id}>{x.codigo} · {x.almacen.nombre}</option>)}</select></Field>
-    <Field label="Destino" required><select value={form.ubicacion_destino_id} onChange={(e) => setForm({ ...form, ubicacion_destino_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((x) => <option key={x.id} value={x.id}>{x.codigo} · {x.almacen.nombre}</option>)}</select></Field>
-    <Field label="Fecha y hora de envío" required><input type="datetime-local" value={form.fecha_envio} onChange={(e) => setForm({ ...form, fecha_envio: e.target.value })} required /></Field>
-    <Field label="Equipo" required className="span-2"><select value={form.inventario_id} onChange={(e) => { const item = options.equipment.find((x) => x.id === Number(e.target.value)); setForm({ ...form, inventario_id: e.target.value, calibracion_salida: item?.calibracion ?? '' }) }} required><option value="">Seleccionar equipo</option>{options.equipment.map((x) => <option key={x.id} value={x.id}>{x.codigo} · {x.descripcion} ({formatNumber(x.stock_actual)} {x.unidad_medida.codigo})</option>)}</select></Field>
-    <Field label="Cantidad" required><input type="number" min="0.001" step="0.001" max={selectedEquipment?.stock_actual} value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: e.target.value })} required /></Field>
-    <Field label="Condición de salida"><select value={form.condicion_salida_id} onChange={(e) => setForm({ ...form, condicion_salida_id: e.target.value })}><option value="">Sin condición</option>{options.conditions.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Field>
-    <Field label="Calibración de salida"><select value={form.calibracion_salida} onChange={(e) => setForm({ ...form, calibracion_salida: e.target.value })}><option value="">Sin registro</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
-    <Field label="Guía o documento"><input value={form.guia} onChange={(e) => setForm({ ...form, guia: e.target.value })} /></Field>
-    <Field label="Transportista"><input value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value })} /></Field>
-    <Field label="Detalle del equipo" className="span-3"><textarea rows={2} value={form.observaciones_equipo} onChange={(e) => setForm({ ...form, observaciones_equipo: e.target.value })} /></Field>
-    <Field label="Observaciones del envío" className="span-3"><textarea rows={3} value={form.observaciones_salida} onChange={(e) => setForm({ ...form, observaciones_salida: e.target.value })} /></Field>
-    <div className="form-actions span-3"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : 'Enviar solicitud'}</button></div>
-  </form></Modal>
+
+  return <Modal wide title="Nueva solicitud de equipo" subtitle="Registra equipos nuevos enviados desde Mina; Logística los incorporará al recibirlos." onClose={onClose}>
+    {error && <ErrorNotice message={error} />}
+    <form className="request-create-form" onSubmit={submit}>
+      <div className="form-grid">
+        <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
+        <Field label="Destino previsto" required><select value={form.ubicacion_destino_id} onChange={(e) => setForm({ ...form, ubicacion_destino_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
+        <Field label="Fecha y hora de envío" required><input type="datetime-local" value={form.fecha_envio} onChange={(e) => setForm({ ...form, fecha_envio: e.target.value })} required /></Field>
+        <Field label="Guía o documento"><input value={form.guia} onChange={(e) => setForm({ ...form, guia: e.target.value })} /></Field>
+        <Field label="Transportista"><input value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value })} /></Field>
+      </div>
+
+      <div className="request-items-heading"><div><strong>Equipos del envío</strong><small>Agrega una línea por equipo o grupo de equipos iguales.</small></div><button type="button" className="btn btn-secondary" onClick={addDetail}>＋ Agregar equipo</button></div>
+      <div className="request-items">
+        {details.map((detail, index) => <section className="request-item-card" key={index}>
+          <header><div><span>{index + 1}</span><strong>Equipo {index + 1}</strong></div>{details.length > 1 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeDetail(index)}>Quitar</button>}</header>
+          <div className="form-grid">
+            <Field label="Nombre o descripción" required className="span-2"><input value={detail.nombre_equipo} onChange={(e) => updateDetail(index, 'nombre_equipo', e.target.value)} placeholder="Ej. Detector multigás portátil" required /></Field>
+            <Field label="Cantidad" required><input type="number" min="1" step="1" value={detail.cantidad} onChange={(e) => updateDetail(index, 'cantidad', e.target.value)} required /></Field>
+            <Field label="Unidad" required><select value={detail.unidad_medida_id} onChange={(e) => updateDetail(index, 'unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.units.filter((item) => !item.permite_decimal).map((item) => <option key={item.id} value={item.id}>{item.nombre} ({item.codigo})</option>)}</select></Field>
+            <Field label="Marca"><input value={detail.marca} onChange={(e) => updateDetail(index, 'marca', e.target.value)} /></Field>
+            <Field label="Modelo"><input value={detail.modelo} onChange={(e) => updateDetail(index, 'modelo', e.target.value)} /></Field>
+            <Field label="Número de serie"><input value={detail.numero_serie} onChange={(e) => updateDetail(index, 'numero_serie', e.target.value)} /></Field>
+            <Field label="Código patrimonial"><input value={detail.codigo_patrimonial} onChange={(e) => updateDetail(index, 'codigo_patrimonial', e.target.value)} /></Field>
+            <Field label="Condición de salida"><select value={detail.condicion_salida_id} onChange={(e) => updateDetail(index, 'condicion_salida_id', e.target.value)}><option value="">Sin condición</option>{options.conditions.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></Field>
+            <Field label="Calibración de salida" required><select value={detail.calibracion_salida} onChange={(e) => { updateDetail(index, 'calibracion_salida', e.target.value); if (e.target.value !== 'CALIBRADO') updateDetail(index, 'fecha_calibracion_salida', '') }} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+            <Field label="Fecha de calibración" required={detail.calibracion_salida === 'CALIBRADO'}><input type="date" value={detail.fecha_calibracion_salida} onChange={(e) => updateDetail(index, 'fecha_calibracion_salida', e.target.value)} disabled={detail.calibracion_salida !== 'CALIBRADO'} required={detail.calibracion_salida === 'CALIBRADO'} /></Field>
+            <Field label="Observaciones del equipo" className="span-3"><textarea rows={2} value={detail.observaciones} onChange={(e) => updateDetail(index, 'observaciones', e.target.value)} /></Field>
+          </div>
+          {Number(detail.cantidad) > 1 && (detail.numero_serie || detail.codigo_patrimonial) && <p className="field-hint">Si las unidades tienen series o códigos patrimoniales diferentes, agrégalas como líneas separadas.</p>}
+        </section>)}
+      </div>
+      <Field label="Observaciones generales del envío"><textarea rows={3} value={form.observaciones_salida} onChange={(e) => setForm({ ...form, observaciones_salida: e.target.value })} /></Field>
+      <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
+    </form>
+  </Modal>
 }
 
 function RequestDetail({ item, onClose }: { item: SolicitudEquipo; onClose: () => void }) {
-  return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}><div className="request-detail"><div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div><h3>Equipos</h3>{item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.inventario.descripcion}</strong><small>{detail.inventario.codigo}</small></div><span>{formatNumber(detail.cantidad)} {detail.inventario.unidad_medida.codigo}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'}</span><span>{detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}<h3>Historial</h3><div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div></div></Modal>
+  return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
+    <div className="request-detail">
+      <div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div>
+      <h3>Equipos</h3>
+      {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
+      <h3>Historial</h3>
+      <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
+    </div>
+  </Modal>
 }
 
 function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClose: () => void; onSaved: () => Promise<void> }) {
+  const initialEntries = Object.fromEntries(item.detalles.map((detail) => [detail.id, {
+    accion: detail.inventario ? 'VINCULAR' : 'CREAR',
+    inventario_id: detail.inventario ? String(detail.inventario.id) : '',
+    codigo_inventario: '',
+    condicion: '',
+    calibracion: detail.calibracion_salida ?? '',
+    fecha_calibracion: detail.fecha_calibracion_salida ?? '',
+  }])) as Record<number, ReceptionDraft>
   const [conditions, setConditions] = useState<Catalogo[]>([])
-  const [entries, setEntries] = useState<Record<number, { condicion: string; calibracion: string }>>(() => Object.fromEntries(item.detalles.map((x) => [x.id, { condicion: '', calibracion: x.calibracion_salida ?? '' }])))
+  const [inventory, setInventory] = useState<Inventario[]>([])
+  const [entries, setEntries] = useState<Record<number, ReceptionDraft>>(initialEntries)
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { catalogsApi.conditions().then(setConditions).catch(() => setConditions([])) }, [])
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(''); try { await equipmentRequestsApi.receive(item.id, { usuario_nombre: LIMA_ACTOR, comentario: comment.trim() || null, detalles: item.detalles.map((x) => ({ detalle_id: x.id, condicion_recepcion_id: entries[x.id].condicion ? Number(entries[x.id].condicion) : null, calibracion_recepcion: entries[x.id].calibracion || null })) }); await onSaved() } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la recepción.') } finally { setSaving(false) } }
-  return <Modal wide title={`Recibir ${item.codigo}`} subtitle="Confirma la condición y calibración observadas al llegar a Lima." onClose={onClose}>{error && <ErrorNotice message={error} />}<form className="receive-form" onSubmit={submit}>{item.detalles.map((detail) => <section className="receive-equipment" key={detail.id}><header><div><strong>{detail.inventario.descripcion}</strong><small>{detail.inventario.codigo}</small></div><span>{formatNumber(detail.cantidad)} {detail.inventario.unidad_medida.codigo}</span></header><div><Field label="Condición de recepción"><select value={entries[detail.id].condicion} onChange={(e) => setEntries({ ...entries, [detail.id]: { ...entries[detail.id], condicion: e.target.value } })}><option value="">Sin condición</option>{conditions.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Field><Field label="Calibración de recepción"><select value={entries[detail.id].calibracion} onChange={(e) => setEntries({ ...entries, [detail.id]: { ...entries[detail.id], calibracion: e.target.value } })}><option value="">Sin registro</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field></div></section>)}<Field label="Observaciones de recepción"><textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} /></Field><div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Confirmando…' : 'Confirmar recepción'}</button></div></form></Modal>
+
+  useEffect(() => {
+    Promise.all([catalogsApi.conditions(), inventoryApi.list({ estado: 'activos', page: 1, page_size: 500 }), inventoryApi.nextCode()])
+      .then(([conditionOptions, inventoryResult, next]) => {
+        setConditions(conditionOptions)
+        setInventory(inventoryResult.items.filter((candidate) => candidate.categoria.nombre.trim().toUpperCase() === 'EQUIPOS' && candidate.ubicacion_id === item.ubicacion_destino.id))
+        setEntries((current) => Object.fromEntries(item.detalles.map((detail, index) => [detail.id, { ...current[detail.id], codigo_inventario: current[detail.id].codigo_inventario || sequentialCode(next.codigo, index) }])) as Record<number, ReceptionDraft>)
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones de recepción.'))
+  }, [item])
+
+  const update = (id: number, values: Partial<ReceptionDraft>) => setEntries((current) => ({ ...current, [id]: { ...current[id], ...values } }))
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setSaving(true); setError('')
+    try {
+      await equipmentRequestsApi.receive(item.id, {
+        usuario_nombre: LIMA_ACTOR,
+        comentario: comment.trim() || null,
+        detalles: item.detalles.map((detail) => ({
+          detalle_id: detail.id,
+          accion_inventario: entries[detail.id].accion,
+          inventario_id: entries[detail.id].accion === 'VINCULAR' ? Number(entries[detail.id].inventario_id) : null,
+          codigo_inventario: entries[detail.id].accion === 'CREAR' ? entries[detail.id].codigo_inventario.trim() || null : null,
+          condicion_recepcion_id: entries[detail.id].condicion ? Number(entries[detail.id].condicion) : null,
+          calibracion_recepcion: entries[detail.id].calibracion || null,
+          fecha_calibracion_recepcion: entries[detail.id].fecha_calibracion || null,
+        })),
+      })
+      await onSaved()
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la recepción.') }
+    finally { setSaving(false) }
+  }
+
+  return <Modal wide title={`Recibir ${item.codigo}`} subtitle="Confirma los datos y crea o vincula cada equipo en el inventario de Lima." onClose={onClose}>
+    {error && <ErrorNotice message={error} />}
+    <form className="receive-form" onSubmit={submit}>
+      {item.detalles.map((detail) => {
+        const entry = entries[detail.id]
+        return <section className="receive-equipment" key={detail.id}>
+          <header><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo, detail.numero_serie].filter(Boolean).join(' · ') || 'Sin identificación adicional'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span></header>
+          <div className="receive-equipment-fields">
+            <Field label="Acción de inventario" required><select value={entry.accion} onChange={(e) => update(detail.id, { accion: e.target.value as ReceptionDraft['accion'], inventario_id: '' })}><option value="CREAR">Crear artículo nuevo</option><option value="VINCULAR">Vincular artículo existente</option></select></Field>
+            {entry.accion === 'CREAR'
+              ? <Field label="Código de inventario"><input value={entry.codigo_inventario} onChange={(e) => update(detail.id, { codigo_inventario: e.target.value.toUpperCase() })} placeholder="Automático si se deja vacío" /></Field>
+              : <Field label="Artículo existente" required><select value={entry.inventario_id} onChange={(e) => update(detail.id, { inventario_id: e.target.value })} required><option value="">Seleccionar</option>{inventory.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.codigo} · {candidate.descripcion}</option>)}</select></Field>}
+            <Field label="Condición de recepción"><select value={entry.condicion} onChange={(e) => update(detail.id, { condicion: e.target.value })}><option value="">Conservar condición de salida</option>{conditions.map((condition) => <option key={condition.id} value={condition.id}>{condition.nombre}</option>)}</select></Field>
+            <Field label="Calibración de recepción"><select value={entry.calibracion} onChange={(e) => update(detail.id, { calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? entry.fecha_calibracion : '' })}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+            <Field label="Fecha de calibración" required={entry.calibracion === 'CALIBRADO'}><input type="date" value={entry.fecha_calibracion} onChange={(e) => update(detail.id, { fecha_calibracion: e.target.value })} disabled={entry.calibracion !== 'CALIBRADO'} required={entry.calibracion === 'CALIBRADO'} /></Field>
+          </div>
+        </section>
+      })}
+      <Field label="Observaciones de recepción"><textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
+      <div className="inventory-entry-notice"><strong>Esta confirmación modifica inventario.</strong><span>Se creará una entrada por cada equipo y la operación quedará vinculada a {item.codigo}.</span></div>
+      <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Confirmando…' : 'Confirmar recepción e ingreso'}</button></div>
+    </form>
+  </Modal>
 }
 
 function Field({ label, required, className = '', children }: { label: string; required?: boolean; className?: string; children: React.ReactNode }) {

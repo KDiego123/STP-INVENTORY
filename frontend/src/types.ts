@@ -45,6 +45,10 @@ export type Inventario = {
   fecha_ultima_salida: string | null
   calibracion: 'NO_CUMPLE' | 'SIN_CALIBRAR' | 'CALIBRADO' | null
   fecha_calibracion: string | null
+  marca: string | null
+  modelo: string | null
+  numero_serie: string | null
+  codigo_patrimonial: string | null
   observaciones: string | null
   activo: boolean
   categoria: Catalogo
@@ -74,11 +78,19 @@ export type EstadoSolicitud = 'ESPERA_APROBACION' | 'EN_CAMINO' | 'RECIBIDO'
 
 export type SolicitudEquipoDetalle = {
   id: number
-  cantidad: string
+  nombre_equipo: string
+  marca: string | null
+  modelo: string | null
+  numero_serie: string | null
+  codigo_patrimonial: string | null
+  cantidad: number
   calibracion_salida: Inventario['calibracion']
+  fecha_calibracion_salida: string | null
   calibracion_recepcion: Inventario['calibracion']
+  fecha_calibracion_recepcion: string | null
   observaciones: string | null
-  inventario: Inventario
+  inventario: Inventario | null
+  unidad_medida: Unidad
   condicion_salida: Catalogo | null
   condicion_recepcion: Catalogo | null
 }

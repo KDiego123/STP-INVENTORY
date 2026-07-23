@@ -8,13 +8,15 @@ type FormData = {
   codigo: string; descripcion: string; categoria_id: string; unidad_medida_id: string
   ubicacion_id: string; condicion_id: string; stock_actual: string; stock_minimo: string
   costo_unitario: string; fecha_ultima_entrada: string; fecha_ultima_salida: string
-  calibracion: string; fecha_calibracion: string; observaciones: string; activo: boolean
+  calibracion: string; fecha_calibracion: string; marca: string; modelo: string
+  numero_serie: string; codigo_patrimonial: string; observaciones: string; activo: boolean
 }
 
 const emptyForm: FormData = {
   codigo: '', descripcion: '', categoria_id: '', unidad_medida_id: '', ubicacion_id: '', condicion_id: '',
   stock_actual: '0', stock_minimo: '', costo_unitario: '', fecha_ultima_entrada: '', fecha_ultima_salida: '',
-  calibracion: '', fecha_calibracion: '', observaciones: '', activo: true,
+  calibracion: '', fecha_calibracion: '', marca: '', modelo: '', numero_serie: '',
+  codigo_patrimonial: '', observaciones: '', activo: true,
 }
 
 const calibrationLabels = { NO_CUMPLE: 'No cumple', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
@@ -77,7 +79,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
           return <tr key={item.id} className={!item.activo ? 'row-muted' : ''}>
-            <td>{readOnly ? <strong className="item-title-static">{item.descripcion}</strong> : <button className="item-title" onClick={() => setEditing(item)}>{item.descripcion}</button>}<small className="item-subtitle">{item.codigo}</small></td>
+            <td>{readOnly ? <strong className="item-title-static">{item.descripcion}</strong> : <button className="item-title" onClick={() => setEditing(item)}>{item.descripcion}</button>}<small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}{item.codigo_patrimonial ? ` · Patr. ${item.codigo_patrimonial}` : ''}</small></td>
             <td><span className="tag">{item.categoria.nombre}</span></td><td><span className="location-code">{item.ubicacion.codigo}</span></td>
             <td className={`numeric ${low ? 'text-danger' : ''}`}><strong>{formatNumber(item.stock_actual)}</strong><small>{item.unidad_medida.codigo}</small></td>
             <td>{item.condicion?.nombre ?? '—'}</td><td>{item.calibracion ? <><span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span>{item.fecha_calibracion && <small className="calibration-date">{formatDate(item.fecha_calibracion)}</small>}</> : '—'}</td><td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>{low && <span className="badge badge-danger">Stock bajo</span>}</td>
@@ -95,7 +97,9 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     codigo: item.codigo, descripcion: item.descripcion, categoria_id: String(item.categoria_id), unidad_medida_id: String(item.unidad_medida_id),
     ubicacion_id: String(item.ubicacion_id), condicion_id: item.condicion_id ? String(item.condicion_id) : '', stock_actual: item.stock_actual,
     stock_minimo: item.stock_minimo ?? '', costo_unitario: item.costo_unitario ?? '', fecha_ultima_entrada: item.fecha_ultima_entrada ?? '',
-    fecha_ultima_salida: item.fecha_ultima_salida ?? '', calibracion: item.calibracion ?? '', fecha_calibracion: item.fecha_calibracion ?? '', observaciones: item.observaciones ?? '', activo: item.activo,
+    fecha_ultima_salida: item.fecha_ultima_salida ?? '', calibracion: item.calibracion ?? '', fecha_calibracion: item.fecha_calibracion ?? '',
+    marca: item.marca ?? '', modelo: item.modelo ?? '', numero_serie: item.numero_serie ?? '',
+    codigo_patrimonial: item.codigo_patrimonial ?? '', observaciones: item.observaciones ?? '', activo: item.activo,
   } : emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -107,7 +111,10 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       ...form, categoria_id: Number(form.categoria_id), unidad_medida_id: Number(form.unidad_medida_id), ubicacion_id: Number(form.ubicacion_id),
       condicion_id: form.condicion_id ? Number(form.condicion_id) : null, stock_actual: form.stock_actual || '0', stock_minimo: form.stock_minimo || null,
       costo_unitario: form.costo_unitario || null, fecha_ultima_entrada: form.fecha_ultima_entrada || null, fecha_ultima_salida: form.fecha_ultima_salida || null,
-      calibracion: form.calibracion || null, fecha_calibracion: form.fecha_calibracion || null, observaciones: form.observaciones.trim() || null,
+      calibracion: form.calibracion || null, fecha_calibracion: form.fecha_calibracion || null,
+      marca: form.marca.trim() || null, modelo: form.modelo.trim() || null,
+      numero_serie: form.numero_serie.trim() || null, codigo_patrimonial: form.codigo_patrimonial.trim() || null,
+      observaciones: form.observaciones.trim() || null,
     }
     try { item ? await inventoryApi.update(item.id, payload) : await inventoryApi.create(payload); await onSaved(`Artículo ${form.codigo} ${item ? 'actualizado' : 'creado'} correctamente.`) }
     catch (err) { setError(err instanceof Error ? err.message : 'No se pudo guardar.') }
@@ -120,7 +127,7 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     <form className="form-grid" onSubmit={submit}>
       <Field label="Código" required><input value={form.codigo} onChange={(e) => update('codigo', e.target.value)} required /></Field>
       <Field label="Descripción" required className="span-2"><input value={form.descripcion} onChange={(e) => update('descripcion', e.target.value)} required /></Field>
-      <Field label="Categoría" required><select value={form.categoria_id} onChange={(e) => setForm({ ...form, categoria_id: e.target.value, calibracion: '', fecha_calibracion: '' })} required><option value="">Seleccionar</option>{options.categorias.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select></Field>
+      <Field label="Categoría" required><select value={form.categoria_id} onChange={(e) => setForm({ ...form, categoria_id: e.target.value, calibracion: '', fecha_calibracion: '', marca: '', modelo: '', numero_serie: '', codigo_patrimonial: '' })} required><option value="">Seleccionar</option>{options.categorias.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select></Field>
       <Field label="Unidad de medida" required><select value={form.unidad_medida_id} onChange={(e) => update('unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.unidades.map((x) => <option value={x.id} key={x.id}>{x.nombre} ({x.codigo})</option>)}</select></Field>
       <Field label="Ubicación" required><select value={form.ubicacion_id} onChange={(e) => update('ubicacion_id', e.target.value)} required><option value="">Seleccionar</option>{options.ubicaciones.map((x) => <option value={x.id} key={x.id}>{x.codigo}</option>)}</select></Field>
       <Field label="Condición"><select value={form.condicion_id} onChange={(e) => update('condicion_id', e.target.value)}><option value="">Sin condición</option>{options.condiciones.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select></Field>
@@ -131,7 +138,10 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       <Field label="Última salida"><input type="date" value={form.fecha_ultima_salida} onChange={(e) => update('fecha_ultima_salida', e.target.value)} /></Field>
       <section className="calibration-panel span-3">
         <div className="calibration-panel-heading"><div><strong>Calibración del equipo</strong><small>Estado y fecha de la última calibración registrada.</small></div><span className={`badge ${isEquipment ? 'badge-success' : 'badge-neutral'}`}>{isEquipment ? 'Aplica' : 'No aplica'}</span></div>
-        {isEquipment ? <div className="calibration-fields"><Field label="Estado de calibración" required><select value={form.calibracion} onChange={(e) => setForm({ ...form, calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? form.fecha_calibracion : '' })} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field><Field label="Fecha de calibración" required={form.calibracion === 'CALIBRADO'}><input type="date" value={form.fecha_calibracion} onChange={(e) => update('fecha_calibracion', e.target.value)} required={form.calibracion === 'CALIBRADO'} disabled={form.calibracion !== 'CALIBRADO'} /></Field></div> : <p>Disponible únicamente cuando la categoría del artículo es EQUIPOS.</p>}
+        {isEquipment ? <>
+          <div className="calibration-fields"><Field label="Estado de calibración" required><select value={form.calibracion} onChange={(e) => setForm({ ...form, calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? form.fecha_calibracion : '' })} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field><Field label="Fecha de calibración" required={form.calibracion === 'CALIBRADO'}><input type="date" value={form.fecha_calibracion} onChange={(e) => update('fecha_calibracion', e.target.value)} required={form.calibracion === 'CALIBRADO'} disabled={form.calibracion !== 'CALIBRADO'} /></Field></div>
+          <div className="equipment-identity-grid"><Field label="Marca"><input value={form.marca} onChange={(e) => update('marca', e.target.value)} /></Field><Field label="Modelo"><input value={form.modelo} onChange={(e) => update('modelo', e.target.value)} /></Field><Field label="Número de serie"><input value={form.numero_serie} onChange={(e) => update('numero_serie', e.target.value)} /></Field><Field label="Código patrimonial"><input value={form.codigo_patrimonial} onChange={(e) => update('codigo_patrimonial', e.target.value)} /></Field></div>
+        </> : <p>Disponible únicamente cuando la categoría del artículo es EQUIPOS.</p>}
       </section>
       <Field label="Observaciones" className="span-3"><textarea rows={3} value={form.observaciones} onChange={(e) => update('observaciones', e.target.value)} /></Field>
       <label className="check-field span-3"><input type="checkbox" checked={form.activo} onChange={(e) => update('activo', e.target.checked)} /><span>Artículo activo</span></label>

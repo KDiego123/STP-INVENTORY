@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -109,6 +110,10 @@ class Inventario(Base):
     fecha_ultima_salida: Mapped[date | None] = mapped_column(Date)
     calibracion: Mapped[str | None] = mapped_column(String(20))
     fecha_calibracion: Mapped[date | None] = mapped_column(Date)
+    marca: Mapped[str | None] = mapped_column(String(100))
+    modelo: Mapped[str | None] = mapped_column(String(100))
+    numero_serie: Mapped[str | None] = mapped_column(String(120))
+    codigo_patrimonial: Mapped[str | None] = mapped_column(String(120))
     observaciones: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -185,15 +190,24 @@ class SolicitudEquipoDetalle(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     solicitud_id: Mapped[int] = mapped_column(ForeignKey("solicitudes_equipos.id", ondelete="CASCADE"))
-    inventario_id: Mapped[int] = mapped_column(ForeignKey("inventario.id"))
-    cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    inventario_id: Mapped[int | None] = mapped_column(ForeignKey("inventario.id"))
+    nombre_equipo: Mapped[str] = mapped_column(String(250))
+    marca: Mapped[str | None] = mapped_column(String(100))
+    modelo: Mapped[str | None] = mapped_column(String(100))
+    numero_serie: Mapped[str | None] = mapped_column(String(120))
+    codigo_patrimonial: Mapped[str | None] = mapped_column(String(120))
+    unidad_medida_id: Mapped[int] = mapped_column(ForeignKey("unidades_medida.id"))
+    cantidad: Mapped[int] = mapped_column(Integer)
     condicion_salida_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
     calibracion_salida: Mapped[str | None] = mapped_column(String(20))
+    fecha_calibracion_salida: Mapped[date | None] = mapped_column(Date)
     condicion_recepcion_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
     calibracion_recepcion: Mapped[str | None] = mapped_column(String(20))
+    fecha_calibracion_recepcion: Mapped[date | None] = mapped_column(Date)
     observaciones: Mapped[str | None] = mapped_column(Text)
 
-    inventario: Mapped[Inventario] = relationship(lazy="selectin")
+    inventario: Mapped[Inventario | None] = relationship(lazy="selectin")
+    unidad_medida: Mapped[UnidadMedida] = relationship(lazy="selectin")
     condicion_salida: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_salida_id], lazy="selectin")
     condicion_recepcion: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_recepcion_id], lazy="selectin")
 
