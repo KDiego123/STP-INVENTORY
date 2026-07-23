@@ -201,6 +201,8 @@ tbody tr:hover { background: #fafcfd; }
 .calibration-date { display: block; margin-top: 3px; color: var(--muted); white-space: nowrap; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
+.inventory-row-actions { display: grid; grid-template-columns: 62px 82px; justify-content: end; }
+.inventory-row-actions .btn { width: 100%; }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; color: var(--muted); font-size: 11px; }
 .pagination > div { display: flex; gap: 7px; }
 
