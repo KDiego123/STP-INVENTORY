@@ -120,7 +120,8 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
   onEdit: () => void
 }) {
   const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
-  const identity = [item.marca, item.modelo].filter(Boolean).join(' · ')
+  const isEquipment = item.categoria.nombre.trim().toUpperCase() === 'EQUIPO'
+  const identity = isEquipment ? [item.marca, item.modelo].filter(Boolean).join(' · ') : ''
   return <Modal wide title={item.descripcion} subtitle={item.codigo} onClose={onClose}>
     <div className="inventory-detail">
       <div className="inventory-detail-hero">
@@ -130,7 +131,7 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
             {low && <span className="badge badge-danger">Stock bajo</span>}
             <span className="tag">{item.categoria.nombre}</span>
           </div>
-          <p>{identity || 'Artículo de inventario'}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</p>
+          <p>{identity || 'Artículo de inventario'}{isEquipment && item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</p>
         </div>
         <div className={`inventory-detail-stock ${low ? 'low' : ''}`}>
           <small>Stock actual</small>
@@ -151,7 +152,7 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
         </div>
       </section>
 
-      <section className="inventory-detail-section">
+      {isEquipment && <section className="inventory-detail-section">
         <h3>Identificación y calibración</h3>
         <div className="inventory-detail-grid">
           <DetailValue label="Marca" value={item.marca} />
@@ -161,7 +162,7 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
           <DetailValue label="Calibración" value={item.calibracion ? calibrationLabels[item.calibracion] : null} />
           <DetailValue label="Fecha de calibración" value={item.fecha_calibracion ? formatDate(item.fecha_calibracion) : null} />
         </div>
-      </section>
+      </section>}
 
       <section className="inventory-detail-section">
         <h3>Actividad</h3>
