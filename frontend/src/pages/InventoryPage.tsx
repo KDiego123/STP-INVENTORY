@@ -136,24 +136,17 @@ function InventoryStatusConfirmation({ item, saving, onClose, onConfirm }: {
 }) {
   const deactivating = item.activo
   return <Modal
-    title={deactivating ? 'Desactivar artículo' : 'Activar artículo'}
-    subtitle="Confirma el cambio de estado del inventario."
+    title={`${deactivating ? 'Desactivar' : 'Activar'} ${item.codigo}`}
+    subtitle={item.descripcion}
     onClose={onClose}
+    compact
   >
-    <div className={`inventory-status-confirmation ${deactivating ? 'deactivate' : 'activate'}`}>
-      <div className="inventory-status-icon" aria-hidden="true">{deactivating ? '–' : '✓'}</div>
-      <div>
-        <span className={`badge ${deactivating ? 'badge-danger' : 'badge-success'}`}>{deactivating ? 'Desactivar' : 'Activar'}</span>
-        <h3>{deactivating ? `¿Desactivar ${item.codigo}?` : `¿Activar ${item.codigo}?`}</h3>
-        <p><strong>{item.descripcion}</strong></p>
-      </div>
-    </div>
     {deactivating ? <div className="inventory-status-notice">
-      <strong>Este artículo no será eliminado.</strong>
-      <p>Sus datos y movimientos se conservarán. Dejará de aparecer entre los artículos activos y podrás reactivarlo desde el filtro “Inactivos” o “Todos”.</p>
+      <span aria-hidden="true">i</span>
+      <p><strong>No se eliminará.</strong> Sus datos y movimientos se conservarán; podrás reactivarlo desde “Inactivos” o “Todos”.</p>
     </div> : <div className="inventory-status-notice activate">
-      <strong>El artículo volverá a estar disponible.</strong>
-      <p>Aparecerá nuevamente en el inventario activo sin perder ningún dato ni movimiento anterior.</p>
+      <span aria-hidden="true">i</span>
+      <p>Volverá al inventario activo sin perder datos ni movimientos anteriores.</p>
     </div>}
     <div className="form-actions">
       <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>

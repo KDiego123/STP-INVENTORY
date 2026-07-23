@@ -8,15 +8,16 @@ export function EmptyState({ icon = '⌕', title, text }: { icon?: string; title
   return <div className="empty-state"><span>{icon}</span><h3>{title}</h3><p>{text}</p></div>
 }
 
-export function Modal({ title, subtitle, children, onClose, wide = false }: {
+export function Modal({ title, subtitle, children, onClose, wide = false, compact = false }: {
   title: string
   subtitle?: string
   children: ReactNode
   onClose: () => void
   wide?: boolean
+  compact?: boolean
 }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+    <section className={`modal ${wide ? 'modal-wide' : ''} ${compact ? 'modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
       <header><div><p className="eyebrow">Gestión administrativa</p><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" onClick={onClose} aria-label="Cerrar">×</button></header>
       <div className="modal-body">{children}</div>
     </section>

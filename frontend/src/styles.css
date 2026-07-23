@@ -130,15 +130,11 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .inventory-detail-value.wide { grid-column: 1 / -1; border-right: 0; }
 .inventory-detail-value small { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .inventory-detail-value strong { overflow-wrap: anywhere; color: #2c4a59; font-size: 11px; line-height: 1.45; }
-.inventory-status-confirmation { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
-.inventory-status-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: white; background: linear-gradient(145deg, #c94d54, #a9323a); box-shadow: 0 8px 20px rgba(185, 56, 62, .2); font-size: 24px; font-weight: 800; }
-.inventory-status-confirmation.activate .inventory-status-icon { background: linear-gradient(145deg, #269879, #17705e); box-shadow: 0 8px 20px rgba(23, 112, 94, .2); }
-.inventory-status-confirmation h3 { margin: 9px 0 4px; color: #183d55; font-size: 17px; }
-.inventory-status-confirmation p { margin: 0; color: #5b707b; font-size: 11px; }
-.inventory-status-notice { margin: 18px 0 2px; padding: 13px 14px; border: 1px solid #efc9cc; border-radius: 10px; color: #7e3035; background: #fdf0f1; }
+.inventory-status-notice { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 2px; padding: 11px 12px; border: 1px solid #efc9cc; border-radius: 9px; color: #7e3035; background: #fdf0f1; }
 .inventory-status-notice.activate { border-color: #bedfd5; color: #236654; background: #eef8f4; }
-.inventory-status-notice strong { display: block; font-size: 12px; }
-.inventory-status-notice p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; }
+.inventory-status-notice > span { display: grid; place-items: center; flex: 0 0 19px; width: 19px; height: 19px; border-radius: 50%; color: white; background: #bd4147; font-size: 10px; font-weight: 800; }
+.inventory-status-notice.activate > span { background: #26806a; }
+.inventory-status-notice p { margin: 1px 0 0; font-size: 11px; line-height: 1.45; }
 .approval-confirmation { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
 .approval-confirmation-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: white; background: linear-gradient(145deg, #198f88, #116e72); box-shadow: 0 8px 20px rgba(20, 124, 120, .22); font-size: 23px; font-weight: 800; }
 .approval-confirmation h3 { margin: 10px 0 5px; color: #183d55; font-size: 17px; }
@@ -220,6 +216,10 @@ tbody tr:hover { background: #fafcfd; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(9, 30, 43, .58); backdrop-filter: blur(3px); }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: hidden; border-radius: 16px; background: white; box-shadow: 0 24px 75px rgba(4, 23, 35, .28); animation: modal-in .18s ease; }
 .modal-wide { width: min(900px, 100%); }
+.modal-compact { width: min(460px, 100%); }
+.modal-compact > header { padding: 16px 18px 14px; }
+.modal-compact .modal-body { padding: 15px 18px 17px; }
+.modal-compact h2 { font-size: 19px; }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 .modal > header { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 22px 17px; border-bottom: 1px solid var(--line); }
 .modal h2 { margin: 3px 0; color: #183d55; font-size: 21px; }.modal header p:not(.eyebrow) { margin: 0; color: var(--muted); font-size: 12px; }
