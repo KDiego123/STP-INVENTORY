@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
+import { SignaturePad } from '../components/SignaturePad'
 import type { Catalogo, Inventario, Paginated, SolicitudEquipo, Ubicacion, Unidad } from '../types'
 import type { ViewRole } from '../App'
 
@@ -102,7 +103,7 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
       </tbody></table></div>
       {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos nuevos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
     </section>}
-    {creating && <RequestForm onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); notify('Solicitud enviada a Logística Lima.'); await load() }} />}
+    {creating && <RequestForm onClose={() => { setCreating(false); void load() }} onSaved={async () => { setCreating(false); notify('Solicitud enviada a Logística Lima.'); await load() }} />}
     {selected && <RequestDetail
       item={selected}
       mine={mine}
@@ -119,6 +120,9 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [options, setOptions] = useState<{ locations: Ubicacion[]; conditions: Catalogo[]; units: Unidad[] }>({ locations: [], conditions: [], units: [] })
   const [form, setForm] = useState({ ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', observaciones_salida: '' })
   const [details, setDetails] = useState<RequestDetailDraft[]>([newDetail()])
+  const [documents, setDocuments] = useState<File[]>([])
+  const [senderSignature, setSenderSignature] = useState<File | null>(null)
+  const [createdRequest, setCreatedRequest] = useState<SolicitudEquipo | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -141,7 +145,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('')
     try {
-      await equipmentRequestsApi.create({
+      const solicitud = createdRequest ?? await equipmentRequestsApi.create({
         ubicacion_origen_id: Number(form.ubicacion_origen_id),
         ubicacion_destino_id: Number(form.ubicacion_destino_id),
         fecha_envio: new Date(form.fecha_envio).toISOString(),
@@ -163,6 +167,15 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           observaciones: detail.observaciones.trim() || null,
         })),
       })
+      if (!createdRequest) setCreatedRequest(solicitud)
+      for (const document of [...documents]) {
+        await equipmentRequestsApi.uploadFile(solicitud.id, 'DOCUMENTO', document, MINE_ACTOR)
+        setDocuments((current) => current.filter((item) => item !== document))
+      }
+      if (senderSignature) {
+        await equipmentRequestsApi.uploadFile(solicitud.id, 'FIRMA_REMITENTE', senderSignature, MINE_ACTOR)
+        setSenderSignature(null)
+      }
       await onSaved()
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la solicitud.') }
     finally { setSaving(false) }
@@ -200,6 +213,21 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         </section>)}
       </div>
       <Field label="Observaciones generales del envío"><textarea rows={3} value={form.observaciones_salida} onChange={(e) => setForm({ ...form, observaciones_salida: e.target.value })} /></Field>
+      <section className="request-attachments">
+        <div className="request-items-heading"><div><strong>Documentos y firma</strong><small>Los PDF y la firma se guardarán en el expediente privado de la solicitud.</small></div></div>
+        <label className="file-drop">
+          <span>Adjuntar documentos PDF</span>
+          <small>Hasta 10 archivos de 20 MB cada uno.</small>
+          <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => setDocuments(Array.from(event.target.files ?? []).slice(0, 10))} />
+        </label>
+        {!!documents.length && <div className="selected-files">{documents.map((file, index) => <div key={`${file.name}-${index}`}><span>PDF</span><strong>{file.name}</strong><button type="button" onClick={() => setDocuments((current) => current.filter((_, position) => position !== index))}>×</button></div>)}</div>}
+        <div className="signature-options">
+          <SignaturePad onChange={setSenderSignature} disabled={saving} />
+          <label className="signature-upload"><strong>O subir firma PNG</strong><small>Selecciona una imagen existente de máximo 5 MB.</small><input type="file" accept="image/png,.png" onChange={(event) => setSenderSignature(event.target.files?.[0] ?? null)} /></label>
+        </div>
+        {senderSignature && <p className="signature-ready">✓ Firma del remitente preparada: {senderSignature.name}</p>}
+        {createdRequest && <p className="field-hint">La solicitud {createdRequest.codigo} ya fue creada. Si una carga falló, vuelve a enviar para continuar con los archivos pendientes sin duplicarla.</p>}
+      </section>
       <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
     </form>
   </Modal>
@@ -217,6 +245,8 @@ function RequestDetail({ item, mine, onClose, onApprove, onReceive }: {
       <div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div>
       <h3>Equipos</h3>
       {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
+      <h3>Documentos y firmas</h3>
+      {item.archivos.length ? <div className="request-files">{item.archivos.map((file) => <a key={file.id} href={equipmentRequestsApi.fileUrl(item.id, file.id)} target="_blank" rel="noreferrer" className={file.tipo === 'DOCUMENTO' ? '' : 'signature-file'}>{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={equipmentRequestsApi.fileUrl(item.id, file.id)} alt={file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'} />}<div><strong>{file.tipo === 'DOCUMENTO' ? file.nombre_original : file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'}</strong><small>{formatDate(file.creado_en, true)} · {(file.tamano_bytes / 1024).toFixed(1)} KB</small></div></a>)}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
       <h3>Historial</h3>
       <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
       <div className="request-detail-actions">
@@ -273,6 +303,8 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
   const [inventory, setInventory] = useState<Inventario[]>([])
   const [entries, setEntries] = useState<Record<number, ReceptionDraft>>(initialEntries)
   const [comment, setComment] = useState('')
+  const [receiverSignature, setReceiverSignature] = useState<File | null>(null)
+  const [signatureUploaded, setSignatureUploaded] = useState(item.archivos.some((file) => file.tipo === 'FIRMA_RECEPTOR'))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -290,6 +322,10 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('')
     try {
+      if (receiverSignature && !signatureUploaded) {
+        await equipmentRequestsApi.uploadFile(item.id, 'FIRMA_RECEPTOR', receiverSignature, LIMA_ACTOR)
+        setSignatureUploaded(true)
+      }
       await equipmentRequestsApi.receive(item.id, {
         usuario_nombre: LIMA_ACTOR,
         comentario: comment.trim() || null,
@@ -327,6 +363,16 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
         </section>
       })}
       <Field label="Observaciones de recepción"><textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
+      <section className="request-attachments">
+        <div className="request-items-heading"><div><strong>Conformidad del receptor</strong><small>Firma en la pantalla o adjunta un PNG existente.</small></div></div>
+        {signatureUploaded ? <p className="signature-ready">✓ La firma del receptor ya está almacenada.</p> : <>
+          <div className="signature-options">
+            <SignaturePad onChange={setReceiverSignature} disabled={saving} />
+            <label className="signature-upload"><strong>O subir firma PNG</strong><small>Selecciona una imagen existente de máximo 5 MB.</small><input type="file" accept="image/png,.png" onChange={(event) => setReceiverSignature(event.target.files?.[0] ?? null)} /></label>
+          </div>
+          {receiverSignature && <p className="signature-ready">✓ Firma preparada: {receiverSignature.name}</p>}
+        </>}
+      </section>
       <div className="inventory-entry-notice"><strong>Esta confirmación modifica inventario.</strong><span>Se creará una entrada por cada equipo y la operación quedará vinculada a {item.codigo}.</span></div>
       <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Confirmando…' : 'Confirmar recepción e ingreso'}</button></div>
     </form>

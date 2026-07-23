@@ -182,6 +182,17 @@ class SolicitudEquipo(Base):
     ubicacion_destino: Mapped[Ubicacion] = relationship(foreign_keys=[ubicacion_destino_id], lazy="selectin")
     detalles: Mapped[list["SolicitudEquipoDetalle"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
     historial: Mapped[list["SolicitudEquipoHistorial"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    archivos_registros: Mapped[list["SolicitudEquipoArchivo"]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
+
+    @property
+    def archivos(self):
+        return [
+            archivo
+            for archivo in self.archivos_registros
+            if archivo.eliminado_en is None
+        ]
 
 
 class SolicitudEquipoDetalle(Base):
@@ -223,3 +234,28 @@ class SolicitudEquipoHistorial(Base):
     usuario_nombre: Mapped[str] = mapped_column(String(150))
     comentario: Mapped[str | None] = mapped_column(Text)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SolicitudEquipoArchivo(Base):
+    __tablename__ = "solicitudes_equipos_archivos"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    solicitud_id: Mapped[int] = mapped_column(
+        ForeignKey("solicitudes_equipos.id", ondelete="CASCADE")
+    )
+    tipo: Mapped[str] = mapped_column(String(30))
+    nombre_original: Mapped[str] = mapped_column(String(255))
+    nombre_almacenado: Mapped[str] = mapped_column(String(255))
+    ruta_remota: Mapped[str] = mapped_column(Text, unique=True)
+    mime_type: Mapped[str] = mapped_column(String(100))
+    tamano_bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(String(64))
+    nextcloud_file_id: Mapped[str | None] = mapped_column(String(255))
+    nextcloud_etag: Mapped[str | None] = mapped_column(String(255))
+    subido_por_usuario_id: Mapped[int | None] = mapped_column(BigInteger)
+    subido_por_nombre: Mapped[str] = mapped_column(String(150))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    eliminado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    eliminado_por_nombre: Mapped[str | None] = mapped_column(String(150))

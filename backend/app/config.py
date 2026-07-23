@@ -39,6 +39,9 @@ class Settings:
         "yes",
         "si",
     }
+    nextcloud_webdav_url: str = os.getenv("NEXTCLOUD_WEBDAV_URL", "").strip()
+    nextcloud_username: str = os.getenv("NEXTCLOUD_USERNAME", "").strip()
+    nextcloud_app_password: str = os.getenv("NEXTCLOUD_APP_PASSWORD", "")
 
 
 settings = Settings()

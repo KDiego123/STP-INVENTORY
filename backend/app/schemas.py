@@ -301,6 +301,17 @@ class SolicitudEquipoHistorialOut(ORMModel):
     creado_en: datetime
 
 
+class SolicitudEquipoArchivoOut(ORMModel):
+    id: int
+    tipo: Literal["DOCUMENTO", "FIRMA_REMITENTE", "FIRMA_RECEPTOR"]
+    nombre_original: str
+    mime_type: str
+    tamano_bytes: int
+    sha256: str
+    subido_por_nombre: str
+    creado_en: datetime
+
+
 class SolicitudEquipoOut(ORMModel):
     id: int
     codigo: str
@@ -321,6 +332,7 @@ class SolicitudEquipoOut(ORMModel):
     ubicacion_destino: UbicacionOut
     detalles: list[SolicitudEquipoDetalleOut]
     historial: list[SolicitudEquipoHistorialOut]
+    archivos: list[SolicitudEquipoArchivoOut]
 
 
 class PaginatedSolicitudes(BaseModel):

@@ -26,12 +26,13 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   Object.entries(options.params ?? {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value))
   })
+  const headers = new Headers(options.headers)
+  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   })
   if (!response.ok) {
     let message = 'No se pudo completar la operación.'
@@ -68,6 +69,14 @@ export const equipmentRequestsApi = {
   create: (body: unknown) => api<SolicitudEquipo>('/solicitudes-equipos', { method: 'POST', body: JSON.stringify(body) }),
   approve: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/aprobar`, { method: 'POST', body: JSON.stringify(body) }),
   receive: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/recibir`, { method: 'POST', body: JSON.stringify(body) }),
+  uploadFile: (id: number, tipo: 'DOCUMENTO' | 'FIRMA_REMITENTE' | 'FIRMA_RECEPTOR', file: File, actor: string) => {
+    const body = new FormData()
+    body.append('tipo', tipo)
+    body.append('subido_por_nombre', actor)
+    body.append('archivo', file)
+    return api(`/solicitudes-equipos/${id}/archivos`, { method: 'POST', body })
+  },
+  fileUrl: (requestId: number, fileId: number) => `/api/solicitudes-equipos/${requestId}/archivos/${fileId}`,
 }
 
 export const catalogsApi = {

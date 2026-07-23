@@ -20,6 +20,8 @@ La aplicación permite:
 - Registrar preingresos de uno o varios equipos enviados desde Mina.
 - Aprobar, seguir y recibir envíos, creando o vinculando sus artículos en inventario.
 - Conservar marca, modelo, serie, código patrimonial, condición y calibración.
+- Adjuntar PDF y firmas PNG a las solicitudes usando almacenamiento privado en Nextcloud.
+- Firmar desde la misma página con mouse, lápiz o pantalla táctil.
 
 ## Migraciones
 
@@ -33,10 +35,13 @@ importacion-excel/002_calibracion_equipos.sql
 importacion-excel/003_fecha_calibracion.sql
 importacion-excel/004_solicitudes_equipos.sql
 importacion-excel/005_preingreso_equipos.sql
+importacion-excel/006_archivos_solicitudes.sql
 ```
 
 La migración `005` desvincula el preingreso del inventario existente, restringe
 las cantidades a enteros y añade los datos de identificación de equipos.
+La migración `006` agrega metadatos de documentos y firmas; los archivos se
+almacenan en Nextcloud y no dentro de PostgreSQL.
 
 ## Importante sobre seguridad
 
@@ -80,6 +85,10 @@ API_HOST=127.0.0.1
 API_PORT=8000
 FRONTEND_ORIGINS=http://127.0.0.1:5173,http://localhost:5173
 AUTH_ENABLED=false
+
+NEXTCLOUD_WEBDAV_URL=https://nube.stpingenieria.com.pe/remote.php/dav/files/USUARIO/TI/STP-INVENTORY/
+NEXTCLOUD_USERNAME=USUARIO
+NEXTCLOUD_APP_PASSWORD=CONTRASENA_DE_APLICACION
 ```
 
 No colocar comillas alrededor de los valores. No compartir ni publicar `.env`.

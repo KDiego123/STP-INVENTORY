@@ -1,10 +1,13 @@
+from hashlib import sha256
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import ceil
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import quote
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select
@@ -20,6 +23,7 @@ from .models import (
     Inventario,
     Movimiento,
     SolicitudEquipo,
+    SolicitudEquipoArchivo,
     SolicitudEquipoDetalle,
     SolicitudEquipoHistorial,
     TipoMovimiento,
@@ -39,6 +43,7 @@ from .schemas import (
     PaginatedMovimientos,
     PaginatedSolicitudes,
     SolicitudEquipoCreate,
+    SolicitudEquipoArchivoOut,
     SolicitudEquipoOut,
     SolicitudRecepcion,
     SolicitudTransicion,
@@ -48,6 +53,7 @@ from .schemas import (
     UnidadCreate,
     UnidadOut,
 )
+from .nextcloud import NextcloudError, storage
 
 
 app = FastAPI(
@@ -118,6 +124,7 @@ def health(db: DB):
         "status": "ok",
         "database": database,
         "auth_enabled": settings.auth_enabled,
+        "nextcloud_configured": storage.configured,
     }
 
 
@@ -504,6 +511,180 @@ def solicitudes_listar(
 @app.get("/api/solicitudes-equipos/{pk}", response_model=SolicitudEquipoOut)
 def solicitud_detalle(pk: int, db: DB):
     return _obtener(db, SolicitudEquipo, pk, "Solicitud")
+
+
+def _archivo_solicitud(db: Session, solicitud_id: int, archivo_id: int):
+    archivo = db.scalar(
+        select(SolicitudEquipoArchivo).where(
+            SolicitudEquipoArchivo.id == archivo_id,
+            SolicitudEquipoArchivo.solicitud_id == solicitud_id,
+            SolicitudEquipoArchivo.eliminado_en.is_(None),
+        )
+    )
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado.")
+    return archivo
+
+
+@app.post(
+    "/api/solicitudes-equipos/{pk}/archivos",
+    response_model=SolicitudEquipoArchivoOut,
+    status_code=201,
+)
+async def solicitud_archivo_subir(
+    pk: int,
+    db: DB,
+    tipo: Annotated[
+        Literal["DOCUMENTO", "FIRMA_REMITENTE", "FIRMA_RECEPTOR"], Form()
+    ],
+    subido_por_nombre: Annotated[str, Form(min_length=1, max_length=150)],
+    archivo: UploadFile = File(...),
+    subido_por_usuario_id: Annotated[int | None, Form()] = None,
+):
+    solicitud = _obtener(db, SolicitudEquipo, pk, "Solicitud")
+    if tipo in {"DOCUMENTO", "FIRMA_REMITENTE"} and solicitud.estado != "ESPERA_APROBACION":
+        raise HTTPException(
+            status_code=409,
+            detail="Los documentos de salida solo pueden adjuntarse antes de aprobar.",
+        )
+    if tipo == "FIRMA_RECEPTOR" and solicitud.estado not in {"EN_CAMINO", "RECIBIDO"}:
+        raise HTTPException(
+            status_code=409,
+            detail="La firma del receptor corresponde a una solicitud en camino o recibida.",
+        )
+
+    nombre_original = (archivo.filename or "archivo").replace("\\", "/").split("/")[-1][:255]
+    es_documento = tipo == "DOCUMENTO"
+    mime_esperado = "application/pdf" if es_documento else "image/png"
+    extension = ".pdf" if es_documento else ".png"
+    limite = 20 * 1024 * 1024 if es_documento else 5 * 1024 * 1024
+    contenido = await archivo.read(limite + 1)
+    await archivo.close()
+    if not contenido:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    if len(contenido) > limite:
+        raise HTTPException(
+            status_code=413,
+            detail=f"El archivo supera el máximo de {20 if es_documento else 5} MB.",
+        )
+    firma_valida = (
+        len(contenido) >= 24
+        and contenido.startswith(b"\x89PNG\r\n\x1a\n")
+        and contenido[12:16] == b"IHDR"
+    )
+    pdf_valido = contenido.startswith(b"%PDF-")
+    if (es_documento and not pdf_valido) or (not es_documento and not firma_valida):
+        raise HTTPException(
+            status_code=400,
+            detail="El contenido no corresponde a un PDF válido." if es_documento else "La firma debe ser un PNG válido.",
+        )
+    if not es_documento:
+        ancho = int.from_bytes(contenido[16:20], "big")
+        alto = int.from_bytes(contenido[20:24], "big")
+        if ancho > 1600 or alto > 800:
+            raise HTTPException(
+                status_code=400,
+                detail="La firma no puede superar 1600 × 800 píxeles.",
+            )
+
+    activos = [
+        item for item in solicitud.archivos_registros if item.eliminado_en is None
+    ]
+    if es_documento and sum(item.tipo == "DOCUMENTO" for item in activos) >= 10:
+        raise HTTPException(status_code=409, detail="La solicitud ya tiene 10 documentos.")
+    if not es_documento and any(item.tipo == tipo for item in activos):
+        raise HTTPException(
+            status_code=409,
+            detail="La solicitud ya tiene una firma activa de este tipo.",
+        )
+
+    identificador = uuid4().hex
+    nombre_almacenado = f"{identificador}{extension}"
+    carpeta = (
+        "documentos"
+        if es_documento
+        else f"firmas/{'remitente' if tipo == 'FIRMA_REMITENTE' else 'receptor'}"
+    )
+    ruta = (
+        f"solicitudes/{solicitud.creado_en.year}/{solicitud.codigo}/"
+        f"{carpeta}/{nombre_almacenado}"
+    )
+    try:
+        remoto = storage.upload(ruta, contenido, mime_esperado)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    registro = SolicitudEquipoArchivo(
+        solicitud_id=solicitud.id,
+        tipo=tipo,
+        nombre_original=nombre_original,
+        nombre_almacenado=nombre_almacenado,
+        ruta_remota=ruta,
+        mime_type=mime_esperado,
+        tamano_bytes=len(contenido),
+        sha256=sha256(contenido).hexdigest(),
+        nextcloud_file_id=remoto["file_id"],
+        nextcloud_etag=remoto["etag"],
+        subido_por_usuario_id=subido_por_usuario_id,
+        subido_por_nombre=subido_por_nombre.strip(),
+    )
+    db.add(registro)
+    try:
+        db.commit()
+        db.refresh(registro)
+    except IntegrityError as exc:
+        db.rollback()
+        try:
+            storage.delete(ruta)
+        except NextcloudError:
+            pass
+        _error_integridad(exc)
+    return registro
+
+
+@app.get("/api/solicitudes-equipos/{pk}/archivos/{archivo_id}")
+def solicitud_archivo_descargar(pk: int, archivo_id: int, db: DB):
+    archivo = _archivo_solicitud(db, pk, archivo_id)
+    try:
+        contenido = storage.download(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    nombre = quote(archivo.nombre_original)
+    return Response(
+        content=contenido,
+        media_type=archivo.mime_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{nombre}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.delete(
+    "/api/solicitudes-equipos/{pk}/archivos/{archivo_id}",
+    status_code=204,
+)
+def solicitud_archivo_eliminar(
+    pk: int,
+    archivo_id: int,
+    eliminado_por_nombre: str,
+    db: DB,
+):
+    solicitud = _obtener(db, SolicitudEquipo, pk, "Solicitud")
+    if solicitud.estado != "ESPERA_APROBACION":
+        raise HTTPException(
+            status_code=409,
+            detail="Los archivos no pueden eliminarse después de aprobar la solicitud.",
+        )
+    archivo = _archivo_solicitud(db, pk, archivo_id)
+    try:
+        storage.delete(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    archivo.eliminado_en = datetime.now(timezone.utc)
+    archivo.eliminado_por_nombre = eliminado_por_nombre.strip()[:150]
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.post("/api/solicitudes-equipos", response_model=SolicitudEquipoOut, status_code=201)

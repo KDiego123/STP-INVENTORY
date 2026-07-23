@@ -105,6 +105,17 @@ export type SolicitudEquipoHistorial = {
   creado_en: string
 }
 
+export type SolicitudEquipoArchivo = {
+  id: number
+  tipo: 'DOCUMENTO' | 'FIRMA_REMITENTE' | 'FIRMA_RECEPTOR'
+  nombre_original: string
+  mime_type: string
+  tamano_bytes: number
+  sha256: string
+  subido_por_nombre: string
+  creado_en: string
+}
+
 export type SolicitudEquipo = {
   id: number
   codigo: string
@@ -125,6 +136,7 @@ export type SolicitudEquipo = {
   ubicacion_destino: Ubicacion
   detalles: SolicitudEquipoDetalle[]
   historial: SolicitudEquipoHistorial[]
+  archivos: SolicitudEquipoArchivo[]
 }
 
 export type Paginated<T> = {

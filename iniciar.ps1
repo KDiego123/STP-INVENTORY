@@ -17,6 +17,10 @@ if (-not $Npm) {
     throw "Falta Node.js/npm. Instale Node.js para compilar el frontend."
 }
 
+Write-Host "Verificando dependencias del backend..." -ForegroundColor Cyan
+& $Python -E -m pip install -r (Join-Path $Backend "requirements.txt") --disable-pip-version-check
+if ($LASTEXITCODE -ne 0) { throw "No se pudieron instalar las dependencias del backend." }
+
 Push-Location -LiteralPath $Frontend
 try {
     if (-not (Test-Path -LiteralPath (Join-Path $Frontend "node_modules"))) {
