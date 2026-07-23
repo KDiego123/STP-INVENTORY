@@ -121,7 +121,7 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     finally { setSaving(false) }
   }
   const selectedCategory = options.categorias.find((x) => x.id === Number(form.categoria_id))
-  const isEquipment = selectedCategory?.nombre.trim().toUpperCase() === 'EQUIPOS'
+  const isEquipment = selectedCategory?.nombre.trim().toUpperCase() === 'EQUIPO'
   return <Modal wide title={item ? `Editar ${item.codigo}` : 'Nuevo artículo'} subtitle="Completa la información principal del inventario." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
     <form className="form-grid" onSubmit={submit}>
@@ -141,7 +141,7 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
         {isEquipment ? <>
           <div className="calibration-fields"><Field label="Estado de calibración" required><select value={form.calibracion} onChange={(e) => setForm({ ...form, calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? form.fecha_calibracion : '' })} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field><Field label="Fecha de calibración" required={form.calibracion === 'CALIBRADO'}><input type="date" value={form.fecha_calibracion} onChange={(e) => update('fecha_calibracion', e.target.value)} required={form.calibracion === 'CALIBRADO'} disabled={form.calibracion !== 'CALIBRADO'} /></Field></div>
           <div className="equipment-identity-grid"><Field label="Marca"><input value={form.marca} onChange={(e) => update('marca', e.target.value)} /></Field><Field label="Modelo"><input value={form.modelo} onChange={(e) => update('modelo', e.target.value)} /></Field><Field label="Número de serie"><input value={form.numero_serie} onChange={(e) => update('numero_serie', e.target.value)} /></Field><Field label="Código patrimonial"><input value={form.codigo_patrimonial} onChange={(e) => update('codigo_patrimonial', e.target.value)} /></Field></div>
-        </> : <p>Disponible únicamente cuando la categoría del artículo es EQUIPOS.</p>}
+        </> : <p>Disponible únicamente cuando la categoría del artículo es EQUIPO.</p>}
       </section>
       <Field label="Observaciones" className="span-3"><textarea rows={3} value={form.observaciones} onChange={(e) => update('observaciones', e.target.value)} /></Field>
       <label className="check-field span-3"><input type="checkbox" checked={form.activo} onChange={(e) => update('activo', e.target.checked)} /><span>Artículo activo</span></label>

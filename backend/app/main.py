@@ -91,15 +91,15 @@ def _validar_catalogos_inventario(db: Session, datos: InventarioCreate):
     ubicacion = _obtener(db, Ubicacion, datos.ubicacion_id, "Ubicación")
     if not categoria.activo or not unidad.activo or not ubicacion.activo:
         raise HTTPException(status_code=400, detail="Seleccione catálogos activos.")
-    es_equipo = categoria.nombre.strip().upper() == "EQUIPOS"
+    es_equipo = categoria.nombre.strip().upper() == "EQUIPO"
     if es_equipo and datos.calibracion is None:
         raise HTTPException(status_code=400, detail="Seleccione el estado de calibración del equipo.")
     if es_equipo and datos.calibracion == "CALIBRADO" and datos.fecha_calibracion is None:
         raise HTTPException(status_code=400, detail="Indique la fecha de calibración del equipo.")
     if not es_equipo and datos.calibracion is not None:
-        raise HTTPException(status_code=400, detail="La calibración solo corresponde a la categoría EQUIPOS.")
+        raise HTTPException(status_code=400, detail="La calibración solo corresponde a la categoría EQUIPO.")
     if not es_equipo and datos.fecha_calibracion is not None:
-        raise HTTPException(status_code=400, detail="La fecha de calibración solo corresponde a la categoría EQUIPOS.")
+        raise HTTPException(status_code=400, detail="La fecha de calibración solo corresponde a la categoría EQUIPO.")
     if datos.condicion_id is not None:
         condicion = _obtener(db, Condicion, datos.condicion_id, "Condición")
         if not condicion.activo:
@@ -626,14 +626,14 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
 
         categoria = db.scalar(
             select(Categoria).where(
-                func.upper(func.trim(Categoria.nombre)) == "EQUIPOS",
+                func.upper(func.trim(Categoria.nombre)) == "EQUIPO",
                 Categoria.activo,
             )
         )
         if categoria is None:
             raise HTTPException(
                 status_code=409,
-                detail="No existe una categoría EQUIPOS activa para registrar el ingreso.",
+                detail="No existe una categoría EQUIPO activa para registrar el ingreso.",
             )
         tipo_entrada = db.scalar(
             select(TipoMovimiento).where(
@@ -683,10 +683,10 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                         status_code=404,
                         detail=f"Artículo para {detalle.nombre_equipo} no encontrado o inactivo.",
                     )
-                if inventario.categoria.nombre.strip().upper() != "EQUIPOS":
+                if inventario.categoria.nombre.strip().upper() != "EQUIPO":
                     raise HTTPException(
                         status_code=400,
-                        detail=f"{inventario.codigo} no pertenece a la categoría EQUIPOS.",
+                        detail=f"{inventario.codigo} no pertenece a la categoría EQUIPO.",
                     )
                 if inventario.unidad_medida_id != detalle.unidad_medida_id:
                     raise HTTPException(

@@ -5,7 +5,7 @@ UPDATE public.inventario AS i
 SET calibracion = 'SIN_CALIBRAR'
 FROM public.categorias AS c
 WHERE i.categoria_id = c.id
-  AND upper(trim(c.nombre)) = 'EQUIPOS'
+  AND upper(trim(c.nombre)) = 'EQUIPO'
   AND i.calibracion IS NULL;
 
 ALTER TABLE public.inventario
@@ -19,4 +19,4 @@ ALTER TABLE public.inventario
     );
 
 COMMENT ON COLUMN public.inventario.calibracion IS
-    'Estado de calibración para artículos de categoría EQUIPOS.';
+    'Estado de calibración para artículos de categoría EQUIPO.';

@@ -63,6 +63,8 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
   const [stateFilter, setStateFilter] = useState('')
   const [creating, setCreating] = useState(false)
   const [selected, setSelected] = useState<SolicitudEquipo | null>(null)
+  const [approvalPending, setApprovalPending] = useState<SolicitudEquipo | null>(null)
+  const [approving, setApproving] = useState(false)
   const [receiving, setReceiving] = useState<SolicitudEquipo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -76,10 +78,18 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
   }, [mine, stateFilter])
   useEffect(() => { void load() }, [load])
 
-  const approve = async (item: SolicitudEquipo) => {
-    if (!window.confirm(`¿Aprobar ${item.codigo} y marcar sus equipos en camino?`)) return
-    try { await equipmentRequestsApi.approve(item.id, { usuario_nombre: LIMA_ACTOR }); notify(`${item.codigo} está en camino.`); await load() }
+  const approve = async () => {
+    if (!approvalPending) return
+    setApproving(true)
+    try {
+      await equipmentRequestsApi.approve(approvalPending.id, { usuario_nombre: LIMA_ACTOR })
+      notify(`${approvalPending.codigo} está en camino.`)
+      setApprovalPending(null)
+      setSelected(null)
+      await load()
+    }
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo aprobar.', 'error') }
+    finally { setApproving(false) }
   }
 
   return <>
@@ -88,12 +98,19 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> solicitudes encontradas</div>
       <div className="table-responsive"><table><thead><tr><th>Solicitud</th><th>Ruta</th><th>Equipos</th><th>Envío</th><th>Estado</th><th /></tr></thead><tbody>
-        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <button className="btn btn-secondary btn-sm" onClick={() => void approve(item)}>Aprobar</button>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
+        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <button className="btn btn-secondary btn-sm" onClick={() => setApprovalPending(item)}>Aprobar</button>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
       </tbody></table></div>
       {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos nuevos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
     </section>}
     {creating && <RequestForm onClose={() => setCreating(false)} onSaved={async () => { setCreating(false); notify('Solicitud enviada a Logística Lima.'); await load() }} />}
-    {selected && <RequestDetail item={selected} onClose={() => setSelected(null)} />}
+    {selected && <RequestDetail
+      item={selected}
+      mine={mine}
+      onClose={() => setSelected(null)}
+      onApprove={() => setApprovalPending(selected)}
+      onReceive={() => { setSelected(null); setReceiving(selected) }}
+    />}
+    {approvalPending && <ApprovalConfirmation item={approvalPending} saving={approving} onClose={() => !approving && setApprovalPending(null)} onConfirm={() => void approve()} />}
     {receiving && <ReceiveForm item={receiving} onClose={() => setReceiving(null)} onSaved={async () => { setReceiving(null); notify('Equipos incorporados al inventario correctamente.'); await load() }} />}
   </>
 }
@@ -188,7 +205,13 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   </Modal>
 }
 
-function RequestDetail({ item, onClose }: { item: SolicitudEquipo; onClose: () => void }) {
+function RequestDetail({ item, mine, onClose, onApprove, onReceive }: {
+  item: SolicitudEquipo
+  mine: boolean
+  onClose: () => void
+  onApprove: () => void
+  onReceive: () => void
+}) {
   return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
     <div className="request-detail">
       <div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div>
@@ -196,6 +219,43 @@ function RequestDetail({ item, onClose }: { item: SolicitudEquipo; onClose: () =
       {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
       <h3>Historial</h3>
       <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
+      <div className="request-detail-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
+        {!mine && item.estado === 'ESPERA_APROBACION' && <button type="button" className="btn btn-secondary" onClick={onApprove}>Aprobar y enviar</button>}
+        {!mine && item.estado === 'EN_CAMINO' && <button type="button" className="btn btn-primary" onClick={onReceive}>Recibir e ingresar</button>}
+      </div>
+    </div>
+  </Modal>
+}
+
+function ApprovalConfirmation({ item, saving, onClose, onConfirm }: {
+  item: SolicitudEquipo
+  saving: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const total = item.detalles.reduce((sum, detail) => sum + Number(detail.cantidad), 0)
+  return <Modal title="Confirmar aprobación" subtitle="Revisa el envío antes de cambiar su estado." onClose={onClose}>
+    <div className="approval-confirmation">
+      <div className="approval-confirmation-icon" aria-hidden="true">→</div>
+      <div>
+        <span className="request-status status-espera_aprobacion">Espera de aprobación</span>
+        <h3>¿Aprobar {item.codigo}?</h3>
+        <p>Los equipos quedarán marcados como <strong>En camino</strong> y Logística podrá registrar su recepción.</p>
+      </div>
+    </div>
+    <div className="approval-confirmation-summary">
+      <div><small>Ruta</small><strong>{item.ubicacion_origen.codigo} → {item.ubicacion_destino.codigo}</strong></div>
+      <div><small>Equipos</small><strong>{item.detalles.length} línea{item.detalles.length === 1 ? '' : 's'} · {formatNumber(total)} unidad{total === 1 ? '' : 'es'}</strong></div>
+      <div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div>
+    </div>
+    <div className="approval-confirmation-notice">
+      <span>i</span>
+      <p>Esta acción se registrará en el historial de la solicitud.</p>
+    </div>
+    <div className="form-actions">
+      <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
+      <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={saving}>{saving ? 'Aprobando…' : 'Sí, aprobar envío'}</button>
     </div>
   </Modal>
 }
@@ -220,7 +280,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
     Promise.all([catalogsApi.conditions(), inventoryApi.list({ estado: 'activos', page: 1, page_size: 500 }), inventoryApi.nextCode()])
       .then(([conditionOptions, inventoryResult, next]) => {
         setConditions(conditionOptions)
-        setInventory(inventoryResult.items.filter((candidate) => candidate.categoria.nombre.trim().toUpperCase() === 'EQUIPOS' && candidate.ubicacion_id === item.ubicacion_destino.id))
+        setInventory(inventoryResult.items.filter((candidate) => candidate.categoria.nombre.trim().toUpperCase() === 'EQUIPO' && candidate.ubicacion_id === item.ubicacion_destino.id))
         setEntries((current) => Object.fromEntries(item.detalles.map((detail, index) => [detail.id, { ...current[detail.id], codigo_inventario: current[detail.id].codigo_inventario || sequentialCode(next.codigo, index) }])) as Record<number, ReceptionDraft>)
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones de recepción.'))
