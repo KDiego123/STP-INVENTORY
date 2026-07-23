@@ -27,6 +27,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [filters, setFilters] = useState({ q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', orden: 'desc' })
   const [applied, setApplied] = useState(filters)
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<Inventario | null>(null)
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -78,18 +79,109 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
       <div className="table-responsive"><table><thead><tr><th>Descripción y código</th><th>Categoría</th><th>Ubicación</th><th className="numeric">Stock</th><th>Condición</th><th>Calibración</th><th>Estado</th>{!readOnly && <th />}</tr></thead>
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
-          return <tr key={item.id} className={!item.activo ? 'row-muted' : ''}>
-            <td>{readOnly ? <strong className="item-title-static">{item.descripcion}</strong> : <button className="item-title" onClick={() => setEditing(item)}>{item.descripcion}</button>}<small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}{item.codigo_patrimonial ? ` · Patr. ${item.codigo_patrimonial}` : ''}</small></td>
+          return <tr
+            key={item.id}
+            className={`clickable-row ${!item.activo ? 'row-muted' : ''}`}
+            onClick={() => setSelected(item)}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setSelected(item)
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label={`Ver detalle de ${item.descripcion}`}
+          >
+            <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}{item.codigo_patrimonial ? ` · Patr. ${item.codigo_patrimonial}` : ''}</small></td>
             <td><span className="tag">{item.categoria.nombre}</span></td><td><span className="location-code">{item.ubicacion.codigo}</span></td>
             <td className={`numeric ${low ? 'text-danger' : ''}`}><strong>{formatNumber(item.stock_actual)}</strong><small>{item.unidad_medida.codigo}</small></td>
             <td>{item.condicion?.nombre ?? '—'}</td><td>{item.calibracion ? <><span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span>{item.fecha_calibracion && <small className="calibration-date">{formatDate(item.fecha_calibracion)}</small>}</> : '—'}</td><td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>{low && <span className="badge badge-danger">Stock bajo</span>}</td>
-            {!readOnly && <td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setEditing(item)}>Editar</button><button className="btn btn-ghost btn-sm" onClick={() => void toggle(item)}>{item.activo ? 'Desactivar' : 'Activar'}</button></td>}
+            {!readOnly && <td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); void toggle(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></td>}
           </tr>})}</tbody></table></div>
       {!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}
       {data && data.pages > 1 && <div className="pagination"><span>Página {data.page} de {data.pages}</span><div><button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Anterior</button><button className="btn btn-secondary btn-sm" disabled={page >= data.pages} onClick={() => setPage(page + 1)}>Siguiente →</button></div></div>}
     </section>}
+    {selected && <InventoryDetail
+      item={selected}
+      readOnly={readOnly}
+      onClose={() => setSelected(null)}
+      onEdit={() => { setSelected(null); setEditing(selected) }}
+    />}
     {editing && <InventoryForm item={editing === 'new' ? null : editing} options={options} onClose={() => setEditing(null)} onSaved={async (message) => { setEditing(null); notify(message); await load() }} />}
   </>
+}
+
+function InventoryDetail({ item, readOnly, onClose, onEdit }: {
+  item: Inventario
+  readOnly: boolean
+  onClose: () => void
+  onEdit: () => void
+}) {
+  const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
+  const identity = [item.marca, item.modelo].filter(Boolean).join(' · ')
+  return <Modal wide title={item.descripcion} subtitle={item.codigo} onClose={onClose}>
+    <div className="inventory-detail">
+      <div className="inventory-detail-hero">
+        <div>
+          <div className="inventory-detail-badges">
+            <span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>
+            {low && <span className="badge badge-danger">Stock bajo</span>}
+            <span className="tag">{item.categoria.nombre}</span>
+          </div>
+          <p>{identity || 'Artículo de inventario'}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</p>
+        </div>
+        <div className={`inventory-detail-stock ${low ? 'low' : ''}`}>
+          <small>Stock actual</small>
+          <strong>{formatNumber(item.stock_actual)}</strong>
+          <span>{item.unidad_medida.nombre} ({item.unidad_medida.codigo})</span>
+        </div>
+      </div>
+
+      <section className="inventory-detail-section">
+        <h3>Información general</h3>
+        <div className="inventory-detail-grid">
+          <DetailValue label="Código" value={item.codigo} />
+          <DetailValue label="Categoría" value={item.categoria.nombre} />
+          <DetailValue label="Ubicación" value={`${item.ubicacion.codigo} · ${item.ubicacion.almacen.nombre}`} />
+          <DetailValue label="Condición" value={item.condicion?.nombre} />
+          <DetailValue label="Stock mínimo" value={item.stock_minimo === null ? null : `${formatNumber(item.stock_minimo)} ${item.unidad_medida.codigo}`} />
+          <DetailValue label="Costo unitario" value={item.costo_unitario === null ? null : `S/ ${formatNumber(item.costo_unitario)}`} />
+        </div>
+      </section>
+
+      <section className="inventory-detail-section">
+        <h3>Identificación y calibración</h3>
+        <div className="inventory-detail-grid">
+          <DetailValue label="Marca" value={item.marca} />
+          <DetailValue label="Modelo" value={item.modelo} />
+          <DetailValue label="Número de serie" value={item.numero_serie} />
+          <DetailValue label="Código patrimonial" value={item.codigo_patrimonial} />
+          <DetailValue label="Calibración" value={item.calibracion ? calibrationLabels[item.calibracion] : null} />
+          <DetailValue label="Fecha de calibración" value={item.fecha_calibracion ? formatDate(item.fecha_calibracion) : null} />
+        </div>
+      </section>
+
+      <section className="inventory-detail-section">
+        <h3>Actividad</h3>
+        <div className="inventory-detail-grid">
+          <DetailValue label="Última entrada" value={item.fecha_ultima_entrada ? formatDate(item.fecha_ultima_entrada) : null} />
+          <DetailValue label="Última salida" value={item.fecha_ultima_salida ? formatDate(item.fecha_ultima_salida) : null} />
+          <DetailValue label="Observaciones" value={item.observaciones} wide />
+        </div>
+      </section>
+
+      <div className="request-detail-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
+        {!readOnly && <button type="button" className="btn btn-primary" onClick={onEdit}>Editar artículo</button>}
+      </div>
+    </div>
+  </Modal>
+}
+
+function DetailValue({ label, value, wide = false }: { label: string; value: string | null | undefined; wide?: boolean }) {
+  return <div className={`inventory-detail-value ${wide ? 'wide' : ''}`}><small>{label}</small><strong>{value || '—'}</strong></div>
 }
 
 function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario | null; options: Options; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
