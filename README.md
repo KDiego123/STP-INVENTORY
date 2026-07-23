@@ -17,6 +17,26 @@ La aplicación permite:
 - Registrar entradas, salidas, ajustes y traslados.
 - Anular el último movimiento de un artículo y revertir su efecto.
 - Crear y editar categorías, unidades, ubicaciones y condiciones.
+- Registrar preingresos de uno o varios equipos enviados desde Mina.
+- Aprobar, seguir y recibir envíos, creando o vinculando sus artículos en inventario.
+- Conservar marca, modelo, serie, código patrimonial, condición y calibración.
+
+## Migraciones
+
+Las migraciones se ejecutan manualmente en `inventario_db`, en orden, antes de
+iniciar una versión nueva del backend. No recrean el esquema ni eliminan datos.
+
+Para el flujo de preingreso de equipos se requiere:
+
+```text
+importacion-excel/002_calibracion_equipos.sql
+importacion-excel/003_fecha_calibracion.sql
+importacion-excel/004_solicitudes_equipos.sql
+importacion-excel/005_preingreso_equipos.sql
+```
+
+La migración `005` desvincula el preingreso del inventario existente, restringe
+las cantidades a enteros y añade los datos de identificación de equipos.
 
 ## Importante sobre seguridad
 

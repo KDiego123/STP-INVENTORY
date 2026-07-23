@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ORMModel(BaseModel):
@@ -60,6 +60,10 @@ class InventarioOut(ORMModel):
     fecha_ultima_salida: date | None
     calibracion: str | None
     fecha_calibracion: date | None
+    marca: str | None
+    modelo: str | None
+    numero_serie: str | None
+    codigo_patrimonial: str | None
     observaciones: str | None
     activo: bool
     categoria: CatalogoBase
@@ -82,6 +86,10 @@ class InventarioCreate(BaseModel):
     fecha_ultima_salida: date | None = None
     calibracion: Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] | None = None
     fecha_calibracion: date | None = None
+    marca: str | None = Field(default=None, max_length=100)
+    modelo: str | None = Field(default=None, max_length=100)
+    numero_serie: str | None = Field(default=None, max_length=120)
+    codigo_patrimonial: str | None = Field(default=None, max_length=120)
     observaciones: str | None = None
     activo: bool = True
 
@@ -184,11 +192,39 @@ EstadoCalibracion = Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"]
 
 
 class SolicitudEquipoDetalleCreate(BaseModel):
-    inventario_id: int
-    cantidad: Decimal = Field(gt=0, decimal_places=3)
+    nombre_equipo: str = Field(min_length=2, max_length=250)
+    marca: str | None = Field(default=None, max_length=100)
+    modelo: str | None = Field(default=None, max_length=100)
+    numero_serie: str | None = Field(default=None, max_length=120)
+    codigo_patrimonial: str | None = Field(default=None, max_length=120)
+    unidad_medida_id: int
+    cantidad: int = Field(ge=1)
     condicion_salida_id: int | None = None
-    calibracion_salida: EstadoCalibracion | None = None
+    calibracion_salida: EstadoCalibracion
+    fecha_calibracion_salida: date | None = None
     observaciones: str | None = None
+
+    @field_validator(
+        "nombre_equipo",
+        "marca",
+        "modelo",
+        "numero_serie",
+        "codigo_patrimonial",
+        "observaciones",
+        mode="before",
+    )
+    @classmethod
+    def limpiar_texto(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        limpio = " ".join(value.split())
+        return limpio or None
+
+    @model_validator(mode="after")
+    def validar_calibracion(self):
+        if self.calibracion_salida == "CALIBRADO" and self.fecha_calibracion_salida is None:
+            raise ValueError("Indique la fecha de calibración del equipo.")
+        return self
 
 
 class SolicitudEquipoCreate(BaseModel):
@@ -211,8 +247,25 @@ class SolicitudTransicion(BaseModel):
 
 class SolicitudRecepcionDetalle(BaseModel):
     detalle_id: int
+    accion_inventario: Literal["CREAR", "VINCULAR"] = "CREAR"
+    inventario_id: int | None = None
+    codigo_inventario: str | None = Field(default=None, max_length=50)
     condicion_recepcion_id: int | None = None
     calibracion_recepcion: EstadoCalibracion | None = None
+    fecha_calibracion_recepcion: date | None = None
+
+    @field_validator("codigo_inventario")
+    @classmethod
+    def normalizar_codigo(cls, value: str | None) -> str | None:
+        return value.strip().upper() if value and value.strip() else None
+
+    @model_validator(mode="after")
+    def validar_destino(self):
+        if self.accion_inventario == "VINCULAR" and self.inventario_id is None:
+            raise ValueError("Seleccione el artículo de inventario que desea vincular.")
+        if self.calibracion_recepcion == "CALIBRADO" and self.fecha_calibracion_recepcion is None:
+            raise ValueError("Indique la fecha de calibración observada en recepción.")
+        return self
 
 
 class SolicitudRecepcion(SolicitudTransicion):
@@ -221,11 +274,19 @@ class SolicitudRecepcion(SolicitudTransicion):
 
 class SolicitudEquipoDetalleOut(ORMModel):
     id: int
-    cantidad: Decimal
+    nombre_equipo: str
+    marca: str | None
+    modelo: str | None
+    numero_serie: str | None
+    codigo_patrimonial: str | None
+    cantidad: int
     calibracion_salida: str | None
+    fecha_calibracion_salida: date | None
     calibracion_recepcion: str | None
+    fecha_calibracion_recepcion: date | None
     observaciones: str | None
-    inventario: InventarioOut
+    inventario: InventarioOut | None
+    unidad_medida: UnidadOut
     condicion_salida: CatalogoBase | None
     condicion_recepcion: CatalogoBase | None
 
