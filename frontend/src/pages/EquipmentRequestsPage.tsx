@@ -119,7 +119,19 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> solicitudes encontradas</div>
       <div className="table-responsive"><table><thead><tr><th>Solicitud</th><th>Ruta</th><th>Equipos</th><th>Envío</th><th>Estado</th><th /></tr></thead><tbody>
-        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <><button className="btn btn-ghost btn-sm text-danger" onClick={() => setRejectionPending(item)}>No aprobar</button><button className="btn btn-secondary btn-sm" onClick={() => setApprovalPending(item)}>Aprobar</button></>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
+        {data?.items.map((item) => <tr
+          key={item.id}
+          className="clickable-row"
+          tabIndex={0}
+          onClick={() => setSelected(item)}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              setSelected(item)
+            }
+          }}
+        ><td><button className="item-title" onClick={(event) => { event.stopPropagation(); setSelected(item) }}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setSelected(item) }}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <><button className="btn btn-ghost btn-sm text-danger" onClick={(event) => { event.stopPropagation(); setRejectionPending(item) }}>No aprobar</button><button className="btn btn-secondary btn-sm" onClick={(event) => { event.stopPropagation(); setApprovalPending(item) }}>Aprobar</button></>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={(event) => { event.stopPropagation(); setReceiving(item) }}>Recibir e ingresar</button>}</td></tr>)}
       </tbody></table></div>
       {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos nuevos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
     </section>}
@@ -542,7 +554,17 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
               ? <Field label="Código de inventario"><input value={entry.codigo_inventario} onChange={(e) => update(detail.id, { codigo_inventario: e.target.value.toUpperCase() })} placeholder="Automático si se deja vacío" /></Field>
               : <Field label="Artículo existente" required><select value={entry.inventario_id} onChange={(e) => update(detail.id, { inventario_id: e.target.value })} required><option value="">Seleccionar</option>{inventory.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.codigo} · {candidate.descripcion}</option>)}</select></Field>}
             <Field label="Condición de recepción"><select value={entry.condicion} onChange={(e) => update(detail.id, { condicion: e.target.value })}><option value="">Conservar condición de salida</option>{conditions.map((condition) => <option key={condition.id} value={condition.id}>{condition.nombre}</option>)}</select></Field>
-            <Field label="Calibración de recepción"><select value={entry.calibracion} onChange={(e) => update(detail.id, { calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? entry.fecha_calibracion : '' })}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+            <Field label="Calibración de recepción"><select value={entry.calibracion} onChange={(e) => {
+              const calibration = e.target.value
+              update(detail.id, {
+                calibracion: calibration,
+                fecha_calibracion: calibration === ''
+                  ? detail.fecha_calibracion_salida ?? ''
+                  : calibration === 'CALIBRADO'
+                    ? entry.fecha_calibracion || detail.fecha_calibracion_salida || ''
+                    : '',
+              })
+            }}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
             <Field label="Fecha de calibración" required={entry.calibracion === 'CALIBRADO'}><input type="date" value={entry.fecha_calibracion} onChange={(e) => update(detail.id, { fecha_calibracion: e.target.value })} disabled={entry.calibracion !== 'CALIBRADO'} required={entry.calibracion === 'CALIBRADO'} /></Field>
           </div>
         </section>
