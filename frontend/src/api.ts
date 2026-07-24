@@ -78,6 +78,7 @@ export const equipmentRequestsApi = {
     return api(`/solicitudes-equipos/${id}/archivos`, { method: 'POST', body })
   },
   fileUrl: (requestId: number, fileId: number) => `/api/solicitudes-equipos/${requestId}/archivos/${fileId}`,
+  retryFiles: () => api<{ sincronizados: number }>('/archivos/reintentar-sincronizacion', { method: 'POST' }),
 }
 
 export const catalogsApi = {
