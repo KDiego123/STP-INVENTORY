@@ -18,7 +18,7 @@ import type { ViewRole } from '../App'
 const MINE_ACTOR = 'Almacenero de Mina · Simulación'
 const LIMA_ACTOR = 'Logística Lima · Simulación'
 const stateLabels = { ESPERA_APROBACION: 'Espera de aprobación', EN_CAMINO: 'En camino', RECIBIDO: 'Recibido', RECHAZADO: 'No aprobado' } as const
-const calibrationLabels = { NO_CUMPLE: 'No cumple', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
+const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
 
 type RequestDetailDraft = {
   nombre_equipo: string
@@ -368,7 +368,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
                 <Field label="Número de serie"><input value={detail.numero_serie} onChange={(e) => updateDetail(index, 'numero_serie', e.target.value)} /></Field>
                 <Field label="Código patrimonial"><input value={detail.codigo_patrimonial} onChange={(e) => updateDetail(index, 'codigo_patrimonial', e.target.value)} /></Field>
                 <div className="field span-3"><span>Condición de salida<b>*</b></span><div className="condition-buttons">{conditionChoices.map((choice) => <button type="button" key={choice.label} disabled={!choice.condition} className={String(choice.condition?.id) === detail.condicion_salida_id ? 'active' : ''} onClick={() => choice.condition && updateDetail(index, 'condicion_salida_id', String(choice.condition.id))}>{choice.label}</button>)}</div></div>
-                <Field label="Calibración de salida" required><select value={detail.calibracion_salida} onChange={(e) => { updateDetail(index, 'calibracion_salida', e.target.value); if (e.target.value !== 'CALIBRADO') updateDetail(index, 'fecha_calibracion_salida', '') }} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+                <Field label="Calibración de salida" required><select value={detail.calibracion_salida} onChange={(e) => { updateDetail(index, 'calibracion_salida', e.target.value); if (e.target.value !== 'CALIBRADO') updateDetail(index, 'fecha_calibracion_salida', '') }} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
                 <Field label="Fecha de calibración" required={detail.calibracion_salida === 'CALIBRADO'}><input type="date" value={detail.fecha_calibracion_salida} onChange={(e) => updateDetail(index, 'fecha_calibracion_salida', e.target.value)} disabled={detail.calibracion_salida !== 'CALIBRADO'} required={detail.calibracion_salida === 'CALIBRADO'} /></Field>
                 <Field label="Observaciones del equipo" className="span-3"><textarea rows={2} value={detail.observaciones} onChange={(e) => updateDetail(index, 'observaciones', e.target.value)} /></Field>
               </div>
@@ -760,7 +760,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
                     ? entry.fecha_calibracion || detail.fecha_calibracion_salida || ''
                     : '',
               })
-            }}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+            }}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
             <Field label="Fecha de calibración" required={entry.calibracion === 'CALIBRADO'}><input type="date" value={entry.fecha_calibracion} onChange={(e) => update(detail.id, { fecha_calibracion: e.target.value })} disabled={entry.calibracion !== 'CALIBRADO'} required={entry.calibracion === 'CALIBRADO'} /></Field>
           </div>
         </section>

@@ -1,4 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
+import SearchIcon from '@mui/icons-material/Search'
+import TuneIcon from '@mui/icons-material/Tune'
 import { catalogsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
 import type { Catalogo, Inventario, Paginated, Ubicacion, Unidad } from '../types'
@@ -19,14 +22,27 @@ const emptyForm: FormData = {
   codigo_patrimonial: '', observaciones: '', activo: true,
 }
 
-const calibrationLabels = { NO_CUMPLE: 'No cumple', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
+const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
+
+function paginationItems(current: number, pages: number) {
+  const visible = new Set([1, pages, current - 1, current, current + 1])
+  const numbers = [...visible].filter((value) => value >= 1 && value <= pages).sort((a, b) => a - b)
+  const result: Array<number | 'ellipsis'> = []
+  numbers.forEach((value, index) => {
+    if (index > 0 && value - numbers[index - 1] > 1) result.push('ellipsis')
+    result.push(value)
+  })
+  return result
+}
 
 export function InventoryPage({ notify, readOnly = false }: { notify: (message: string, type?: 'success' | 'error') => void; readOnly?: boolean }) {
   const [data, setData] = useState<Paginated<Inventario> | null>(null)
   const [options, setOptions] = useState<Options>({ categorias: [], unidades: [], ubicaciones: [], condiciones: [] })
-  const [filters, setFilters] = useState({ q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', orden: 'desc' })
+  const [filters, setFilters] = useState({ q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', calibracion: '', orden: 'desc' })
   const [applied, setApplied] = useState(filters)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [selected, setSelected] = useState<Inventario | null>(null)
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
   const [statusPending, setStatusPending] = useState<Inventario | null>(null)
@@ -38,21 +54,24 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     setLoading(true); setError('')
     try {
       const [result, categorias, unidades, ubicaciones, condiciones] = await Promise.all([
-        inventoryApi.list({ ...applied, page, page_size: 20 }), catalogsApi.categories(), catalogsApi.units(), catalogsApi.locations(), catalogsApi.conditions(),
+        inventoryApi.list({ ...applied, page, page_size: pageSize }), catalogsApi.categories(), catalogsApi.units(), catalogsApi.locations(), catalogsApi.conditions(),
       ])
       setData(result); setOptions({ categorias, unidades, ubicaciones, condiciones })
     } catch (err) { setError(err instanceof Error ? err.message : 'Error inesperado') }
     finally { setLoading(false) }
-  }, [applied, page])
+  }, [applied, page, pageSize])
   useEffect(() => { void load() }, [load])
 
   const search = (event: FormEvent) => { event.preventDefault(); setPage(1); setApplied(filters) }
-  const clear = () => { const next = { q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', orden: 'desc' }; setFilters(next); setApplied(next); setPage(1) }
+  const clear = () => { const next = { q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', calibracion: '', orden: 'desc' }; setFilters(next); setApplied(next); setPage(1) }
+  const quickFilter = (estado: string, calibracion = '') => {
+    const next = { ...filters, estado, calibracion }
+    setFilters(next); setApplied(next); setPage(1)
+  }
   const toggleOrder = () => {
-    const orden = filters.orden === 'desc' ? 'asc' : 'desc'
-    const next = { ...filters, orden }
-    setFilters(next)
-    setApplied(next)
+    const orden = applied.orden === 'desc' ? 'asc' : 'desc'
+    setFilters((current) => ({ ...current, orden }))
+    setApplied((current) => ({ ...current, orden }))
     setPage(1)
   }
   const toggle = async () => {
@@ -70,22 +89,30 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
 
   return <>
     <div className="page-heading"><div><p className="eyebrow">Almacén Lima</p><h1>Inventario</h1><p>{readOnly ? 'Consulta los artículos registrados en modo de solo lectura.' : 'Consulta y administra los artículos registrados.'}</p></div>{!readOnly && <button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button>}</div>
-    <form className="filter-bar filter-bar-inventory" onSubmit={search}>
-      <label className="search-field"><span>⌕</span><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Buscar código, descripción u observación" /></label>
-      <select value={filters.categoria_id} onChange={(e) => setFilters({ ...filters, categoria_id: e.target.value })}><option value="">Todas las categorías</option>{options.categorias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select>
-      <select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{options.ubicaciones.map((item) => <option value={item.id} key={item.id}>{item.codigo}</option>)}</select>
-      <select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="activos">Activos</option><option value="bajo">Stock bajo</option><option value="inactivos">Inactivos</option><option value="todos">Todos</option></select>
-      <div className="filter-actions"><button className="btn btn-primary">Filtrar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
+    <form className="inventory-search-panel card" onSubmit={search}>
+      <div className="inventory-search-row">
+        <label className="inventory-search-input"><SearchIcon /><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Buscar por código, descripción, marca, modelo o serie" /></label>
+        <button className="btn btn-primary">Buscar</button>
+        <button type="button" className={`btn btn-secondary inventory-advanced-toggle ${showAdvanced ? 'active' : ''}`} onClick={() => setShowAdvanced((value) => !value)}><TuneIcon /> Filtros avanzados</button>
+      </div>
+      <div className="inventory-quick-filters" aria-label="Filtros rápidos">
+        <button type="button" className={applied.estado === 'todos' && !applied.calibracion ? 'active' : ''} onClick={() => quickFilter('todos')}>Todos</button>
+        <button type="button" className={applied.estado === 'activos' && !applied.calibracion ? 'active' : ''} onClick={() => quickFilter('activos')}>Activos</button>
+        <button type="button" className={applied.estado === 'bajo' ? 'active danger' : ''} onClick={() => quickFilter('bajo')}>Bajo stock</button>
+        <button type="button" className={applied.calibracion === 'SIN_CALIBRAR' ? 'active danger' : ''} onClick={() => quickFilter('activos', 'SIN_CALIBRAR')}>Sin calibrar</button>
+        <button type="button" className={applied.estado === 'inactivos' ? 'active' : ''} onClick={() => quickFilter('inactivos')}>Inactivos</button>
+      </div>
+      {showAdvanced && <div className="inventory-advanced-filters">
+        <label><span>Categoría</span><select value={filters.categoria_id} onChange={(e) => setFilters({ ...filters, categoria_id: e.target.value })}><option value="">Todas las categorías</option>{options.categorias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select></label>
+        <label><span>Ubicación</span><select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{options.ubicaciones.map((item) => <option value={item.id} key={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></label>
+        <label><span>Estado</span><select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="activos">Activos</option><option value="bajo">Stock bajo</option><option value="inactivos">Inactivos</option><option value="todos">Todos</option></select></label>
+        <label><span>Calibración</span><select value={filters.calibracion} onChange={(e) => setFilters({ ...filters, calibracion: e.target.value })}><option value="">Todos</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></label>
+        <div className="filter-actions"><button className="btn btn-primary">Aplicar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
+      </div>}
     </form>
-    <div className="sort-bar" aria-label="Orden del inventario">
-      <span>Ordenar por</span>
-      <button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Alternar el orden por ID">
-        {filters.orden === 'desc' ? '↓ ID · nuevos primero' : '↑ ID · antiguos primero'}
-      </button>
-    </div>
-    {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
-      <div className="table-summary"><strong>{data?.total ?? 0}</strong> registros encontrados</div>
-      <div className="table-responsive"><table><thead><tr><th>Descripción y código</th><th>Categoría</th><th>Ubicación</th><th className="numeric">Stock</th><th>Condición</th><th>Calibración</th><th>Estado</th>{!readOnly && <th />}</tr></thead>
+    {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card inventory-table-card">
+      <div className="inventory-table-toolbar"><strong>{data?.total ?? 0} artículos</strong><div><span>Ordenar por ID</span><button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Alternar el orden por ID">{applied.orden === 'desc' ? '↓ Más recientes' : '↑ Más antiguos'}</button></div></div>
+      <div className="table-responsive"><table className="inventory-modern-table"><thead><tr><th>Artículo</th><th>Ubicación</th><th>Disponibilidad</th><th>Control</th><th>Estado</th>{!readOnly && <th>Acciones</th>}<th /></tr></thead>
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
           return <tr
@@ -103,14 +130,18 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             role="button"
             aria-label={`Ver detalle de ${item.descripcion}`}
           >
-            <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}{item.codigo_patrimonial ? ` · Patr. ${item.codigo_patrimonial}` : ''}</small></td>
-            <td><span className="tag">{item.categoria.nombre}</span></td><td><span className="location-code">{item.ubicacion.codigo}</span></td>
-            <td className={`numeric ${low ? 'text-danger' : ''}`}><strong>{formatNumber(item.stock_actual)}</strong><small>{item.unidad_medida.codigo}</small></td>
-            <td>{item.condicion?.nombre ?? '—'}</td><td>{item.calibracion ? <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span> : '—'}</td><td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span>{low && <span className="badge badge-danger">Stock bajo</span>}</td>
+            <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</small><span className="tag inventory-category-tag">{item.categoria.nombre}</span></td>
+            <td><span className="location-code">{item.ubicacion.codigo}</span><small className="item-subtitle">{item.ubicacion.almacen.nombre}</small></td>
+            <td className={low ? 'text-danger' : ''}><strong>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</strong><small className="item-subtitle">{low ? 'Stock bajo' : 'Disponible'}</small></td>
+            <td><small className="inventory-control-condition">{item.condicion?.nombre ?? 'Sin condición'}</small>{item.calibracion && <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span>}</td>
+            <td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
             {!readOnly && <td className="row-actions"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
-          </tr>})}</tbody></table></div>
-      {!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}
-      {data && data.pages > 1 && <div className="pagination"><span>Página {data.page} de {data.pages}</span><div><button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Anterior</button><button className="btn btn-secondary btn-sm" disabled={page >= data.pages} onClick={() => setPage(page + 1)}>Siguiente →</button></div></div>}
+            <td className="inventory-detail-chevron"><KeyboardArrowRightIcon /></td>
+          </tr>})}</tbody></table>{!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}</div>
+      {data && <div className="pagination inventory-sticky-pagination">
+        <div className="pagination-pages"><button className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button>{paginationItems(page, data.pages).map((value, index) => value === 'ellipsis' ? <span key={`ellipsis-${index}`}>…</span> : <button key={value} className={`btn btn-sm ${value === page ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setPage(value)}>{value}</button>)}<button className="btn btn-secondary btn-sm" disabled={page >= data.pages} onClick={() => setPage(page + 1)}>›</button></div>
+        <label>Mostrar <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1) }}><option value="10">10</option><option value="20">20</option><option value="50">50</option></select> por página</label>
+      </div>}
     </section>}
     {selected && <InventoryDetail
       item={selected}
@@ -276,7 +307,7 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       <section className="calibration-panel span-3">
         <div className="calibration-panel-heading"><div><strong>Calibración del equipo</strong><small>Estado y fecha de la última calibración registrada.</small></div><span className={`badge ${isEquipment ? 'badge-success' : 'badge-neutral'}`}>{isEquipment ? 'Aplica' : 'No aplica'}</span></div>
         {isEquipment ? <>
-          <div className="calibration-fields"><Field label="Estado de calibración" required><select value={form.calibracion} onChange={(e) => setForm({ ...form, calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? form.fecha_calibracion : '' })} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field><Field label="Fecha de calibración" required={form.calibracion === 'CALIBRADO'}><input type="date" value={form.fecha_calibracion} onChange={(e) => update('fecha_calibracion', e.target.value)} required={form.calibracion === 'CALIBRADO'} disabled={form.calibracion !== 'CALIBRADO'} /></Field></div>
+          <div className="calibration-fields"><Field label="Estado de calibración" required><select value={form.calibracion} onChange={(e) => setForm({ ...form, calibracion: e.target.value, fecha_calibracion: e.target.value === 'CALIBRADO' ? form.fecha_calibracion : '' })} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field><Field label="Fecha de calibración" required={form.calibracion === 'CALIBRADO'}><input type="date" value={form.fecha_calibracion} onChange={(e) => update('fecha_calibracion', e.target.value)} required={form.calibracion === 'CALIBRADO'} disabled={form.calibracion !== 'CALIBRADO'} /></Field></div>
           <div className="equipment-identity-grid"><Field label="Marca"><input value={form.marca} onChange={(e) => update('marca', e.target.value)} /></Field><Field label="Modelo"><input value={form.modelo} onChange={(e) => update('modelo', e.target.value)} /></Field><Field label="Número de serie"><input value={form.numero_serie} onChange={(e) => update('numero_serie', e.target.value)} /></Field><Field label="Código patrimonial"><input value={form.codigo_patrimonial} onChange={(e) => update('codigo_patrimonial', e.target.value)} /></Field></div>
         </> : <p>Disponible únicamente cuando la categoría del artículo es EQUIPO.</p>}
       </section>
