@@ -7,6 +7,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
+  const exportSequence = useRef(0)
   const [hasSignature, setHasSignature] = useState(false)
 
   const point = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -50,12 +51,60 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    event.currentTarget.toBlob((blob) => {
-      if (blob) onChange(new File([blob], `firma-${Date.now()}.png`, { type: 'image/png' }))
+    exportCroppedSignature(event.currentTarget)
+  }
+
+  const exportCroppedSignature = (canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext('2d')
+    if (!context) return
+    const { width, height } = canvas
+    const pixels = context.getImageData(0, 0, width, height).data
+    let minX = width
+    let minY = height
+    let maxX = -1
+    let maxY = -1
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (pixels[(y * width + x) * 4 + 3] === 0) continue
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      }
+    }
+    if (maxX < minX || maxY < minY) return
+
+    const padding = 30
+    const sourceX = Math.max(0, minX - padding)
+    const sourceY = Math.max(0, minY - padding)
+    const sourceWidth = Math.min(width, maxX + padding + 1) - sourceX
+    const sourceHeight = Math.min(height, maxY + padding + 1) - sourceY
+    const cropped = document.createElement('canvas')
+    cropped.width = sourceWidth
+    cropped.height = sourceHeight
+    cropped.getContext('2d')?.drawImage(
+      canvas,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      sourceWidth,
+      sourceHeight,
+    )
+
+    const currentExport = ++exportSequence.current
+    cropped.toBlob((blob) => {
+      if (blob && currentExport === exportSequence.current) {
+        onChange(new File([blob], `firma-${Date.now()}.png`, { type: 'image/png' }))
+      }
     }, 'image/png')
   }
 
   const clear = () => {
+    exportSequence.current += 1
     const canvas = canvasRef.current
     canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
     setHasSignature(false)
