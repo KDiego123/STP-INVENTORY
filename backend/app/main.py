@@ -163,6 +163,7 @@ def inventario_listar(
     categoria_id: int | None = None,
     ubicacion_id: int | None = None,
     estado: Literal["activos", "inactivos", "todos", "bajo"] = "activos",
+    calibracion: Literal["", "NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] = "",
     orden: Literal["desc", "asc"] = "desc",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=500),
@@ -197,6 +198,8 @@ def inventario_listar(
                 Inventario.stock_actual <= Inventario.stock_minimo,
             ]
         )
+    if calibracion:
+        filtros.append(Inventario.calibracion == calibracion)
 
     total = db.scalar(select(func.count()).select_from(Inventario).where(*filtros)) or 0
     criterio_id = Inventario.id.asc() if orden == "asc" else Inventario.id.desc()
