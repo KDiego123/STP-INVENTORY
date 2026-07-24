@@ -23,11 +23,9 @@ if ($LASTEXITCODE -ne 0) { throw "No se pudieron instalar las dependencias del b
 
 Push-Location -LiteralPath $Frontend
 try {
-    if (-not (Test-Path -LiteralPath (Join-Path $Frontend "node_modules"))) {
-        Write-Host "Instalando dependencias del frontend..." -ForegroundColor Cyan
-        & $Npm.Source install
-        if ($LASTEXITCODE -ne 0) { throw "No se pudieron instalar las dependencias del frontend." }
-    }
+    Write-Host "Verificando dependencias del frontend..." -ForegroundColor Cyan
+    & $Npm.Source install --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "No se pudieron instalar las dependencias del frontend." }
 
     Write-Host "Compilando frontend actualizado..." -ForegroundColor Cyan
     & $Npm.Source run build
