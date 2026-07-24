@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
-import { catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
+import { ApiError, catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
 import { SignatureInput } from '../components/SignaturePad'
 import type { Catalogo, Inventario, Paginated, SolicitudEquipo, Ubicacion, Unidad } from '../types'
@@ -58,12 +58,31 @@ function sequentialCode(base: string, offset: number) {
   return `${match[1]}${String(Number(match[2]) + offset).padStart(match[2].length, '0')}`
 }
 
+function isNextcloudUnavailable(error: unknown) {
+  return error instanceof ApiError && error.status === 503
+}
+
+function NextcloudUnavailableNotice({ savedCode, reception = false }: { savedCode?: string; reception?: boolean }) {
+  return <div className="nextcloud-unavailable" role="alert">
+    <span aria-hidden="true">!</span>
+    <div>
+      <strong>Nextcloud no está disponible</strong>
+      <p>{reception
+        ? 'La recepción no fue cerrada ni se modificó el inventario. La firma sigue seleccionada; intenta nuevamente más tarde.'
+        : savedCode
+          ? `La solicitud ${savedCode} ya fue guardada y no se duplicará. Intenta cargar los archivos nuevamente más tarde.`
+          : 'No se pudieron guardar los archivos. Permanecen seleccionados en esta ventana; intenta nuevamente más tarde.'}</p>
+    </div>
+  </div>
+}
+
 export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify: (message: string, type?: 'success' | 'error') => void }) {
   const mine = role === 'almacenero'
   const [data, setData] = useState<Paginated<SolicitudEquipo> | null>(null)
   const [stateFilter, setStateFilter] = useState('')
   const [creating, setCreating] = useState(false)
   const [selected, setSelected] = useState<SolicitudEquipo | null>(null)
+  const [attaching, setAttaching] = useState<SolicitudEquipo | null>(null)
   const [approvalPending, setApprovalPending] = useState<SolicitudEquipo | null>(null)
   const [approving, setApproving] = useState(false)
   const [rejectionPending, setRejectionPending] = useState<SolicitudEquipo | null>(null)
@@ -112,10 +131,12 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
       onApprove={() => setApprovalPending(selected)}
       onReject={() => setRejectionPending(selected)}
       onReceive={() => { setSelected(null); setReceiving(selected) }}
+      onAttach={() => { setAttaching(selected); setSelected(null) }}
     />}
     {approvalPending && <ApprovalConfirmation item={approvalPending} saving={approving} onClose={() => !approving && setApprovalPending(null)} onConfirm={() => void approve()} />}
     {rejectionPending && <RejectionForm item={rejectionPending} onClose={() => setRejectionPending(null)} onSaved={async () => { setRejectionPending(null); setSelected(null); notify(`${rejectionPending.codigo} no fue aprobada.`); await load() }} />}
     {receiving && <ReceiveForm item={receiving} onClose={() => setReceiving(null)} onSaved={async () => { setReceiving(null); notify('Equipos incorporados al inventario correctamente.'); await load() }} />}
+    {attaching && <AttachmentRetryForm item={attaching} onClose={() => setAttaching(null)} onSaved={async () => { setAttaching(null); notify(`Archivos adjuntados a ${attaching.codigo}.`); await load() }} />}
   </>
 }
 
@@ -129,6 +150,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [nextcloudUnavailable, setNextcloudUnavailable] = useState(false)
 
   useEffect(() => {
     Promise.all([catalogsApi.locations(), catalogsApi.conditions(), catalogsApi.units()])
@@ -147,7 +169,8 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const removeDetail = (index: number) => setDetails((current) => current.filter((_, position) => position !== index))
 
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setSaving(true); setError('')
+    event.preventDefault(); setSaving(true); setError(''); setNextcloudUnavailable(false)
+    let persistedRequest = createdRequest
     try {
       setProgress(createdRequest ? 'Reanudando la carga de archivos…' : 'Creando la solicitud…')
       const solicitud = createdRequest ?? await equipmentRequestsApi.create({
@@ -172,6 +195,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           observaciones: detail.observaciones.trim() || null,
         })),
       })
+      persistedRequest = solicitud
       if (!createdRequest) setCreatedRequest(solicitud)
       const pendingDocuments = [...documents]
       for (const [index, document] of pendingDocuments.entries()) {
@@ -186,13 +210,17 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       }
       setProgress('Finalizando el registro…')
       await onSaved()
-    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la solicitud.') }
+    } catch (err) {
+      if (isNextcloudUnavailable(err) && persistedRequest) setNextcloudUnavailable(true)
+      else setError(err instanceof Error ? err.message : 'No se pudo registrar la solicitud.')
+    }
     finally { setSaving(false); setProgress('') }
   }
 
   return <>{saving && <ProcessingOverlay title="Registrando solicitud" detail={progress || 'Procesando información…'} />}
   <Modal wide title="Nueva solicitud de equipo" subtitle="Registra equipos nuevos enviados desde Mina; Logística los incorporará al recibirlos." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
+    {nextcloudUnavailable && <NextcloudUnavailableNotice savedCode={createdRequest?.codigo} />}
     <form className="request-create-form" onSubmit={submit}>
       <div className="form-grid">
         <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
@@ -234,19 +262,20 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         <SignatureInput value={senderSignature} onChange={setSenderSignature} disabled={saving} />
         {createdRequest && <p className="field-hint">La solicitud {createdRequest.codigo} ya fue creada. Si una carga falló, vuelve a enviar para continuar con los archivos pendientes sin duplicarla.</p>}
       </section>
-      <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
+      <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>{createdRequest ? 'Cerrar; adjuntar después' : 'Cancelar'}</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : createdRequest ? 'Reintentar carga de archivos' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
     </form>
   </Modal>
   </>
 }
 
-function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive }: {
+function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, onAttach }: {
   item: SolicitudEquipo
   mine: boolean
   onClose: () => void
   onApprove: () => void
   onReject: () => void
   onReceive: () => void
+  onAttach: () => void
 }) {
   return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
     <div className="request-detail">
@@ -267,6 +296,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive }: 
       <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
       <div className="request-detail-actions">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
+        {mine && item.estado === 'ESPERA_APROBACION' && <button type="button" className="btn btn-secondary" onClick={onAttach}>Adjuntar archivos</button>}
         {!mine && item.estado === 'ESPERA_APROBACION' && <>
           <button type="button" className="btn btn-ghost text-danger" onClick={onReject}>No aprobar</button>
           <button type="button" className="btn btn-secondary" onClick={onApprove}>Aprobar y enviar</button>
@@ -275,6 +305,73 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive }: 
       </div>
     </div>
   </Modal>
+}
+
+function AttachmentRetryForm({ item, onClose, onSaved }: {
+  item: SolicitudEquipo
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
+  const existingDocuments = item.archivos.filter((file) => file.tipo === 'DOCUMENTO').length
+  const availableDocumentSlots = Math.max(0, 10 - existingDocuments)
+  const hasSenderSignature = item.archivos.some((file) => file.tipo === 'FIRMA_REMITENTE')
+  const [documents, setDocuments] = useState<File[]>([])
+  const [senderSignature, setSenderSignature] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState('')
+  const [nextcloudUnavailable, setNextcloudUnavailable] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    setNextcloudUnavailable(false)
+    try {
+      const pendingDocuments = [...documents]
+      for (const [index, document] of pendingDocuments.entries()) {
+        setProgress(`Subiendo PDF ${index + 1} de ${pendingDocuments.length}…`)
+        await equipmentRequestsApi.uploadFile(item.id, 'DOCUMENTO', document, MINE_ACTOR)
+        setDocuments((current) => current.filter((candidate) => candidate !== document))
+      }
+      if (!hasSenderSignature && senderSignature) {
+        setProgress('Guardando la firma del remitente…')
+        await equipmentRequestsApi.uploadFile(item.id, 'FIRMA_REMITENTE', senderSignature, MINE_ACTOR)
+        setSenderSignature(null)
+      }
+      await onSaved()
+    } catch (err) {
+      if (isNextcloudUnavailable(err)) setNextcloudUnavailable(true)
+      else setError(err instanceof Error ? err.message : 'No se pudieron adjuntar los archivos.')
+    } finally {
+      setSaving(false)
+      setProgress('')
+    }
+  }
+
+  const hasPendingFiles = documents.length > 0 || (!hasSenderSignature && senderSignature !== null)
+
+  return <>{saving && <ProcessingOverlay title="Adjuntando archivos" detail={progress || 'Guardando archivos en Nextcloud…'} />}
+    <Modal title={`Adjuntar archivos a ${item.codigo}`} subtitle="Completa los documentos pendientes antes de que Lima apruebe el envío." onClose={onClose}>
+      {error && <ErrorNotice message={error} />}
+      {nextcloudUnavailable && <NextcloudUnavailableNotice />}
+      <form className="request-create-form" onSubmit={submit}>
+        {availableDocumentSlots > 0 ? <label className="file-drop">
+          <span>Adjuntar documentos PDF</span>
+          <small>Puedes agregar {availableDocumentSlots} archivo{availableDocumentSlots === 1 ? '' : 's'} más.</small>
+          <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => setDocuments(Array.from(event.target.files ?? []).slice(0, availableDocumentSlots))} />
+        </label> : <p className="request-files-empty">La solicitud ya tiene el máximo de 10 documentos PDF.</p>}
+        {!!documents.length && <div className="selected-files">{documents.map((file, index) => <div key={`${file.name}-${index}`}><span>PDF</span><strong>{file.name}</strong><button type="button" onClick={() => setDocuments((current) => current.filter((_, position) => position !== index))}>×</button></div>)}</div>}
+        {hasSenderSignature
+          ? <p className="signature-ready">✓ La firma del remitente ya está almacenada.</p>
+          : <SignatureInput value={senderSignature} onChange={setSenderSignature} disabled={saving} />}
+        <div className="form-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cerrar</button>
+          <button type="submit" className="btn btn-primary" disabled={saving || !hasPendingFiles}>{nextcloudUnavailable ? 'Reintentar' : 'Guardar archivos'}</button>
+        </div>
+      </form>
+    </Modal>
+  </>
 }
 
 function ApprovalConfirmation({ item, saving, onClose, onConfirm }: {
@@ -386,6 +483,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [nextcloudUnavailable, setNextcloudUnavailable] = useState(false)
 
   useEffect(() => {
     Promise.all([catalogsApi.conditions(), inventoryApi.list({ estado: 'activos', page: 1, page_size: 500 }), inventoryApi.nextCode()])
@@ -399,7 +497,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
 
   const update = (id: number, values: Partial<ReceptionDraft>) => setEntries((current) => ({ ...current, [id]: { ...current[id], ...values } }))
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setSaving(true); setError('')
+    event.preventDefault(); setSaving(true); setError(''); setNextcloudUnavailable(false)
     try {
       if (receiverSignature && !signatureUploaded) {
         setProgress('Guardando la firma del receptor…')
@@ -422,13 +520,17 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
       })
       setProgress('Finalizando la recepción…')
       await onSaved()
-    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la recepción.') }
+    } catch (err) {
+      if (isNextcloudUnavailable(err)) setNextcloudUnavailable(true)
+      else setError(err instanceof Error ? err.message : 'No se pudo registrar la recepción.')
+    }
     finally { setSaving(false); setProgress('') }
   }
 
   return <>{saving && <ProcessingOverlay title="Procesando recepción" detail={progress || 'Procesando información…'} />}
   <Modal wide title={`Recibir ${item.codigo}`} subtitle="Confirma los datos y crea o vincula cada equipo en el inventario de Lima." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
+    {nextcloudUnavailable && <NextcloudUnavailableNotice reception />}
     <form className="receive-form" onSubmit={submit}>
       {item.detalles.map((detail) => {
         const entry = entries[detail.id]
