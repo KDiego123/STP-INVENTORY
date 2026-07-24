@@ -319,10 +319,6 @@ class SolicitudEquipoArchivoOut(ORMModel):
     mime_type: str
     tamano_bytes: int
     sha256: str
-    estado_almacenamiento: Literal["PENDIENTE", "SINCRONIZADO", "ERROR"]
-    intentos_sincronizacion: int
-    ultimo_error_sincronizacion: str | None
-    sincronizado_en: datetime | None
     subido_por_nombre: str
     creado_en: datetime
 

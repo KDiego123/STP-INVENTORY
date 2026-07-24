@@ -1,5 +1,3 @@
-import asyncio
-from contextlib import asynccontextmanager, suppress
 from hashlib import sha256
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -18,11 +16,6 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import get_db
-from .file_storage import (
-    LocalFileError,
-    local_cache,
-    sync_pending_files,
-)
 from .models import (
     Almacen,
     Categoria,
@@ -64,33 +57,10 @@ from .schemas import (
 from .nextcloud import NextcloudError, storage
 
 
-async def _file_sync_loop():
-    while True:
-        try:
-            await asyncio.to_thread(sync_pending_files)
-        except Exception:
-            # El siguiente ciclo vuelve a intentarlo; el error individual queda en BD.
-            pass
-        await asyncio.sleep(settings.file_sync_interval_seconds)
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    local_cache.ensure_ready()
-    task = asyncio.create_task(_file_sync_loop())
-    try:
-        yield
-    finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-
 app = FastAPI(
     title="API Inventario Lima",
     version="0.1.0",
     description="API administrativa. La autenticación se incorporará en una fase posterior.",
-    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -151,29 +121,12 @@ def _validar_catalogos_inventario(db: Session, datos: InventarioCreate):
 @app.get("/api/health")
 def health(db: DB):
     database = db.execute(select(func.current_database())).scalar_one()
-    pending_files = db.scalar(
-        select(func.count())
-        .select_from(SolicitudEquipoArchivo)
-        .where(
-            SolicitudEquipoArchivo.estado_almacenamiento.in_(
-                ("PENDIENTE", "ERROR")
-            ),
-            SolicitudEquipoArchivo.eliminado_en.is_(None),
-        )
-    )
     return {
         "status": "ok",
         "database": database,
         "auth_enabled": settings.auth_enabled,
         "nextcloud_configured": storage.configured,
-        "pending_files": pending_files or 0,
     }
-
-
-@app.post("/api/archivos/reintentar-sincronizacion")
-async def archivos_reintentar_sincronizacion():
-    synchronized = await asyncio.to_thread(sync_pending_files, 20, True)
-    return {"sincronizados": synchronized}
 
 
 @app.get("/api/dashboard", response_model=DashboardOut)
@@ -658,25 +611,9 @@ async def solicitud_archivo_subir(
         f"{carpeta}/{nombre_almacenado}"
     )
     try:
-        local_cache.write(ruta, contenido)
-    except (OSError, LocalFileError) as exc:
-        raise HTTPException(
-            status_code=507,
-            detail="No se pudo guardar la copia local privada del archivo.",
-        ) from exc
-
-    remoto: dict[str, str | None] = {"file_id": None, "etag": None}
-    estado_almacenamiento = "PENDIENTE"
-    ultimo_error = None
-    sincronizado_en = None
-    ultimo_intento_en = datetime.now(timezone.utc)
-    intentos = 1
-    try:
         remoto = storage.upload(ruta, contenido, mime_esperado)
-        estado_almacenamiento = "SINCRONIZADO"
-        sincronizado_en = ultimo_intento_en
     except NextcloudError as exc:
-        ultimo_error = str(exc)[:2000]
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     registro = SolicitudEquipoArchivo(
         solicitud_id=solicitud.id,
@@ -689,12 +626,6 @@ async def solicitud_archivo_subir(
         sha256=sha256(contenido).hexdigest(),
         nextcloud_file_id=remoto["file_id"],
         nextcloud_etag=remoto["etag"],
-        estado_almacenamiento=estado_almacenamiento,
-        ruta_local=ruta,
-        intentos_sincronizacion=intentos,
-        ultimo_error_sincronizacion=ultimo_error,
-        ultimo_intento_en=ultimo_intento_en,
-        sincronizado_en=sincronizado_en,
         subido_por_usuario_id=subido_por_usuario_id,
         subido_por_nombre=subido_por_nombre.strip(),
     )
@@ -704,12 +635,10 @@ async def solicitud_archivo_subir(
         db.refresh(registro)
     except IntegrityError as exc:
         db.rollback()
-        local_cache.delete(ruta)
-        if estado_almacenamiento == "SINCRONIZADO":
-            try:
-                storage.delete(ruta)
-            except NextcloudError:
-                pass
+        try:
+            storage.delete(ruta)
+        except NextcloudError:
+            pass
         _error_integridad(exc)
     return registro
 
@@ -717,29 +646,10 @@ async def solicitud_archivo_subir(
 @app.get("/api/solicitudes-equipos/{pk}/archivos/{archivo_id}")
 def solicitud_archivo_descargar(pk: int, archivo_id: int, db: DB):
     archivo = _archivo_solicitud(db, pk, archivo_id)
-    contenido = local_cache.valid_content(archivo.ruta_local, archivo.sha256)
-    if contenido is None:
-        try:
-            contenido = storage.download(archivo.ruta_remota)
-        except NextcloudError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "El archivo no está en la caché local y Nextcloud no está "
-                    f"disponible: {exc}"
-                ),
-            ) from exc
-        if sha256(contenido).hexdigest() != archivo.sha256:
-            raise HTTPException(
-                status_code=502,
-                detail="El archivo recuperado de Nextcloud no coincide con su hash.",
-            )
-        try:
-            local_cache.write(archivo.ruta_remota, contenido)
-            archivo.ruta_local = archivo.ruta_remota
-            db.commit()
-        except (OSError, LocalFileError):
-            db.rollback()
+    try:
+        contenido = storage.download(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     nombre = quote(archivo.nombre_original)
     return Response(
         content=contenido,
@@ -768,12 +678,10 @@ def solicitud_archivo_eliminar(
             detail="Los archivos no pueden eliminarse después de aprobar la solicitud.",
         )
     archivo = _archivo_solicitud(db, pk, archivo_id)
-    if archivo.estado_almacenamiento == "SINCRONIZADO":
-        try:
-            storage.delete(archivo.ruta_remota)
-        except NextcloudError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-    local_cache.delete(archivo.ruta_local)
+    try:
+        storage.delete(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     archivo.eliminado_en = datetime.now(timezone.utc)
     archivo.eliminado_por_nombre = eliminado_por_nombre.strip()[:150]
     db.commit()
