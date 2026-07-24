@@ -33,6 +33,26 @@ type ReceptionDraft = {
   fecha_calibracion: string
 }
 
+type RequestHeaderDraft = {
+  ubicacion_origen_id: string
+  ubicacion_destino_id: string
+  fecha_envio: string
+  guia: string
+  transportista: string
+  observaciones_salida: string
+}
+
+const REQUEST_DRAFT_KEY = 'inventory-equipment-request-draft'
+
+function readRequestDraft(): { form: RequestHeaderDraft; details: RequestDetailDraft[]; collapsed: boolean[] } | null {
+  try {
+    const value = localStorage.getItem(REQUEST_DRAFT_KEY)
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
+  }
+}
+
 const newDetail = (unitId = ''): RequestDetailDraft => ({
   nombre_equipo: '',
   marca: '',
@@ -60,6 +80,14 @@ function sequentialCode(base: string, offset: number) {
 
 function isNextcloudUnavailable(error: unknown) {
   return error instanceof ApiError && error.status === 503
+}
+
+function conditionDisplayName(name: string | null | undefined) {
+  const normalized = name?.trim().toUpperCase()
+  if (normalized === 'NUEVO') return 'Nuevo'
+  if (normalized === 'USADO') return 'Buen estado'
+  if (normalized === 'MALOGRADO') return 'Con observaciones'
+  return name || null
 }
 
 function NextcloudUnavailableNotice({ savedCode, reception = false }: { savedCode?: string; reception?: boolean }) {
@@ -153,9 +181,11 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
 }
 
 function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
+  const [initialDraft] = useState(readRequestDraft)
   const [options, setOptions] = useState<{ locations: Ubicacion[]; conditions: Catalogo[]; units: Unidad[] }>({ locations: [], conditions: [], units: [] })
-  const [form, setForm] = useState({ ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', observaciones_salida: '' })
-  const [details, setDetails] = useState<RequestDetailDraft[]>([newDetail()])
+  const [form, setForm] = useState<RequestHeaderDraft>(initialDraft?.form ?? { ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', observaciones_salida: '' })
+  const [details, setDetails] = useState<RequestDetailDraft[]>(initialDraft?.details?.length ? initialDraft.details : [newDetail()])
+  const [collapsedDetails, setCollapsedDetails] = useState<boolean[]>(initialDraft && initialDraft.collapsed?.length === initialDraft.details?.length ? initialDraft.collapsed : [false])
   const [documents, setDocuments] = useState<File[]>([])
   const [senderSignature, setSenderSignature] = useState<File | null>(null)
   const [createdRequest, setCreatedRequest] = useState<SolicitudEquipo | null>(null)
@@ -163,6 +193,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [nextcloudUnavailable, setNextcloudUnavailable] = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(initialDraft ? new Date() : null)
 
   useEffect(() => {
     Promise.all([catalogsApi.locations(), catalogsApi.conditions(), catalogsApi.units()])
@@ -174,14 +205,67 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       .catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones.'))
   }, [])
 
+  useEffect(() => {
+    if (createdRequest) return
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(REQUEST_DRAFT_KEY, JSON.stringify({ form, details, collapsed: collapsedDetails }))
+        setDraftSavedAt(new Date())
+      } catch {
+        // El formulario sigue operativo si el navegador bloquea el almacenamiento local.
+      }
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [form, details, collapsedDetails, createdRequest])
+
   const updateDetail = (index: number, key: keyof RequestDetailDraft, value: string) => {
     setDetails((current) => current.map((item, position) => position === index ? { ...item, [key]: value } : item))
   }
-  const addDetail = () => setDetails((current) => [...current, newDetail(current[0]?.unidad_medida_id)])
-  const removeDetail = (index: number) => setDetails((current) => current.filter((_, position) => position !== index))
+  const addDetail = () => {
+    setDetails((current) => [...current, newDetail(current[0]?.unidad_medida_id)])
+    setCollapsedDetails((current) => [...current, false])
+  }
+  const removeDetail = (index: number) => {
+    setDetails((current) => current.filter((_, position) => position !== index))
+    setCollapsedDetails((current) => current.filter((_, position) => position !== index))
+  }
+  const editDetail = (index: number) => setCollapsedDetails((current) => current.map((value, position) => position === index ? false : value))
+  const detailError = (detail: RequestDetailDraft) => {
+    if (!detail.nombre_equipo.trim()) return 'Indica el nombre o descripción del equipo.'
+    if (!detail.cantidad || Number(detail.cantidad) < 1) return 'La cantidad debe ser mayor a cero.'
+    if (!detail.unidad_medida_id) return 'Selecciona la unidad de medida.'
+    if (!detail.condicion_salida_id) return 'Selecciona la condición de salida.'
+    const selectedCondition = options.conditions.find((condition) => String(condition.id) === detail.condicion_salida_id)
+    if (selectedCondition && /OBSERV|MALOGRADO/i.test(selectedCondition.nombre) && !detail.observaciones.trim()) return 'Describe las observaciones de la condición de salida.'
+    if (!detail.calibracion_salida) return 'Selecciona el estado de calibración.'
+    if (detail.calibracion_salida === 'CALIBRADO' && !detail.fecha_calibracion_salida) return 'Indica la fecha de calibración.'
+    return ''
+  }
+  const saveDetail = (index: number) => {
+    const validation = detailError(details[index])
+    if (validation) { setError(`Equipo ${index + 1}: ${validation}`); return }
+    setError('')
+    setCollapsedDetails((current) => current.map((value, position) => position === index ? true : value))
+  }
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(REQUEST_DRAFT_KEY, JSON.stringify({ form, details, collapsed: collapsedDetails }))
+      setDraftSavedAt(new Date())
+      setError('')
+    } catch {
+      setError('El navegador no permitió guardar el borrador local.')
+    }
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError(''); setNextcloudUnavailable(false)
+    const invalidDetail = details.findIndex((detail) => detailError(detail))
+    if (invalidDetail >= 0) {
+      setCollapsedDetails((current) => current.map((value, index) => index === invalidDetail ? false : value))
+      setError(`Equipo ${invalidDetail + 1}: ${detailError(details[invalidDetail])}`)
+      setSaving(false)
+      return
+    }
     let persistedRequest = createdRequest
     try {
       setProgress(createdRequest ? 'Reanudando la carga de archivos…' : 'Creando la solicitud…')
@@ -221,6 +305,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         setSenderSignature(null)
       }
       setProgress('Finalizando el registro…')
+      localStorage.removeItem(REQUEST_DRAFT_KEY)
       await onSaved()
     } catch (err) {
       if (isNextcloudUnavailable(err) && persistedRequest) setNextcloudUnavailable(true)
@@ -229,52 +314,80 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     finally { setSaving(false); setProgress('') }
   }
 
+  const findCondition = (...names: string[]) => options.conditions.find((condition) => names.some((name) => condition.nombre.trim().toUpperCase().includes(name)))
+  const conditionChoices = [
+    { label: 'Nuevo', condition: findCondition('NUEVO') },
+    { label: 'Buen estado', condition: findCondition('BUEN', 'USADO') },
+    { label: 'Con observaciones', condition: findCondition('OBSERV', 'MALOGRADO') },
+  ]
+  const origin = options.locations.find((location) => String(location.id) === form.ubicacion_origen_id)
+  const destination = options.locations.find((location) => String(location.id) === form.ubicacion_destino_id)
+
   return <>{saving && <ProcessingOverlay title="Registrando solicitud" detail={progress || 'Procesando información…'} />}
-  <Modal wide title="Nueva solicitud de equipo" subtitle="Registra equipos nuevos enviados desde Mina; Logística los incorporará al recibirlos." onClose={onClose}>
-    {error && <ErrorNotice message={error} />}
-    {nextcloudUnavailable && <NextcloudUnavailableNotice savedCode={createdRequest?.codigo} />}
-    <form className="request-create-form" onSubmit={submit}>
-      <div className="form-grid">
-        <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
-        <Field label="Destino previsto" required><select value={form.ubicacion_destino_id} onChange={(e) => setForm({ ...form, ubicacion_destino_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
-        <Field label="Fecha y hora de envío" required><input type="datetime-local" value={form.fecha_envio} onChange={(e) => setForm({ ...form, fecha_envio: e.target.value })} required /></Field>
-        <Field label="Guía o documento"><input value={form.guia} onChange={(e) => setForm({ ...form, guia: e.target.value })} /></Field>
-        <Field label="Transportista"><input value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value })} /></Field>
+  <Modal wide className="request-create-modal" eyebrow="Gestión de almacén" title="Nueva solicitud de envío" subtitle="Registra los equipos que salen de Mina para que Logística pueda recibirlos." onClose={onClose}>
+    <form className="request-create-overhaul" onSubmit={submit}>
+      <div className="request-create-main">
+        {error && <ErrorNotice message={error} />}
+        {nextcloudUnavailable && <NextcloudUnavailableNotice savedCode={createdRequest?.codigo} />}
+
+        <section className="request-form-section">
+          <div className="request-section-title"><div><h3>Datos del envío</h3><p>Define la ruta y los datos generales del despacho.</p></div></div>
+          <div className="form-grid">
+            <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
+            <Field label="Destino previsto" required><select value={form.ubicacion_destino_id} onChange={(e) => setForm({ ...form, ubicacion_destino_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
+            <Field label="Fecha y hora de envío" required><input type="datetime-local" value={form.fecha_envio} onChange={(e) => setForm({ ...form, fecha_envio: e.target.value })} required /></Field>
+            <Field label="Guía o documento"><input value={form.guia} onChange={(e) => setForm({ ...form, guia: e.target.value })} /></Field>
+            <Field label="Transportista"><input value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value })} /></Field>
+            <Field label="Observaciones generales"><textarea rows={2} value={form.observaciones_salida} onChange={(e) => setForm({ ...form, observaciones_salida: e.target.value })} /></Field>
+          </div>
+        </section>
+
+        <section className="request-form-section">
+          <div className="request-section-title"><div><h3>Equipos del envío</h3><p>Agrega cada tipo de equipo; si tiene serie, identifícalo individualmente.</p></div><button type="button" className="btn btn-secondary" onClick={addDetail}>＋ Agregar equipo</button></div>
+          <div className="request-items">
+            {details.map((detail, index) => collapsedDetails[index] ? <article className="saved-equipment-row" key={index}>
+              <span>{index + 1}</span><div><strong>{detail.nombre_equipo}</strong><small>{detail.numero_serie ? `Serie ${detail.numero_serie}` : detail.codigo_patrimonial ? `Patrimonial ${detail.codigo_patrimonial}` : `${formatNumber(detail.cantidad)} ${options.units.find((unit) => String(unit.id) === detail.unidad_medida_id)?.codigo ?? ''}`}</small></div><b>{conditionChoices.find((choice) => String(choice.condition?.id) === detail.condicion_salida_id)?.label ?? 'Sin condición'}</b><button type="button" className="btn btn-ghost btn-sm" onClick={() => editDetail(index)}>Editar</button><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeDetail(index)}>Quitar</button>
+            </article> : <section className="request-item-card expanded" key={index}>
+              <header><div><span>{index + 1}</span><strong>Equipo {index + 1}</strong></div>{details.length > 1 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeDetail(index)}>Quitar</button>}</header>
+              <div className="form-grid">
+                <Field label="Nombre o descripción" required className="span-2"><input value={detail.nombre_equipo} onChange={(e) => updateDetail(index, 'nombre_equipo', e.target.value)} placeholder="Ej. Detector multigás portátil" required /></Field>
+                <Field label="Cantidad" required><input type="number" min="1" step="1" value={detail.cantidad} onChange={(e) => updateDetail(index, 'cantidad', e.target.value)} required /></Field>
+                <Field label="Unidad" required><select value={detail.unidad_medida_id} onChange={(e) => updateDetail(index, 'unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.units.filter((item) => !item.permite_decimal).map((item) => <option key={item.id} value={item.id}>{item.nombre} ({item.codigo})</option>)}</select></Field>
+                <Field label="Marca"><input value={detail.marca} onChange={(e) => updateDetail(index, 'marca', e.target.value)} /></Field>
+                <Field label="Modelo"><input value={detail.modelo} onChange={(e) => updateDetail(index, 'modelo', e.target.value)} /></Field>
+                <Field label="Número de serie"><input value={detail.numero_serie} onChange={(e) => updateDetail(index, 'numero_serie', e.target.value)} /></Field>
+                <Field label="Código patrimonial"><input value={detail.codigo_patrimonial} onChange={(e) => updateDetail(index, 'codigo_patrimonial', e.target.value)} /></Field>
+                <div className="field span-3"><span>Condición de salida<b>*</b></span><div className="condition-buttons">{conditionChoices.map((choice) => <button type="button" key={choice.label} disabled={!choice.condition} className={String(choice.condition?.id) === detail.condicion_salida_id ? 'active' : ''} onClick={() => choice.condition && updateDetail(index, 'condicion_salida_id', String(choice.condition.id))}>{choice.label}</button>)}</div></div>
+                <Field label="Calibración de salida" required><select value={detail.calibracion_salida} onChange={(e) => { updateDetail(index, 'calibracion_salida', e.target.value); if (e.target.value !== 'CALIBRADO') updateDetail(index, 'fecha_calibracion_salida', '') }} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
+                <Field label="Fecha de calibración" required={detail.calibracion_salida === 'CALIBRADO'}><input type="date" value={detail.fecha_calibracion_salida} onChange={(e) => updateDetail(index, 'fecha_calibracion_salida', e.target.value)} disabled={detail.calibracion_salida !== 'CALIBRADO'} required={detail.calibracion_salida === 'CALIBRADO'} /></Field>
+                <Field label="Observaciones del equipo" className="span-3"><textarea rows={2} value={detail.observaciones} onChange={(e) => updateDetail(index, 'observaciones', e.target.value)} /></Field>
+              </div>
+              {Number(detail.cantidad) > 1 && (detail.numero_serie || detail.codigo_patrimonial) && <p className="field-hint">Si las unidades tienen series o códigos patrimoniales diferentes, agrégalas como líneas separadas.</p>}
+              <div className="equipment-save-actions"><button type="button" className="btn btn-primary" onClick={() => saveDetail(index)}>Guardar equipo</button></div>
+            </section>)}
+          </div>
+        </section>
+
+        <section className="request-attachments request-form-section">
+          <div className="request-section-title"><div><h3>Documentos y firma</h3><p>Los PDF y la firma se guardarán en el expediente privado.</p></div></div>
+          <label className="file-drop"><span>Adjuntar documentos PDF</span><small>Hasta 10 archivos de 20 MB cada uno.</small><input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => setDocuments(Array.from(event.target.files ?? []).slice(0, 10))} /></label>
+          {!!documents.length && <div className="selected-files">{documents.map((file, index) => <div key={`${file.name}-${index}`}><span>PDF</span><strong>{file.name}</strong><button type="button" onClick={() => setDocuments((current) => current.filter((_, position) => position !== index))}>×</button></div>)}</div>}
+          <SignatureInput value={senderSignature} onChange={setSenderSignature} disabled={saving} />
+          {createdRequest && <p className="field-hint">La solicitud {createdRequest.codigo} ya fue creada. Puedes continuar con los archivos pendientes sin duplicarla.</p>}
+        </section>
       </div>
 
-      <div className="request-items-heading"><div><strong>Equipos del envío</strong><small>Agrega una línea por equipo o grupo de equipos iguales.</small></div><button type="button" className="btn btn-secondary" onClick={addDetail}>＋ Agregar equipo</button></div>
-      <div className="request-items">
-        {details.map((detail, index) => <section className="request-item-card" key={index}>
-          <header><div><span>{index + 1}</span><strong>Equipo {index + 1}</strong></div>{details.length > 1 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeDetail(index)}>Quitar</button>}</header>
-          <div className="form-grid">
-            <Field label="Nombre o descripción" required className="span-2"><input value={detail.nombre_equipo} onChange={(e) => updateDetail(index, 'nombre_equipo', e.target.value)} placeholder="Ej. Detector multigás portátil" required /></Field>
-            <Field label="Cantidad" required><input type="number" min="1" step="1" value={detail.cantidad} onChange={(e) => updateDetail(index, 'cantidad', e.target.value)} required /></Field>
-            <Field label="Unidad" required><select value={detail.unidad_medida_id} onChange={(e) => updateDetail(index, 'unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.units.filter((item) => !item.permite_decimal).map((item) => <option key={item.id} value={item.id}>{item.nombre} ({item.codigo})</option>)}</select></Field>
-            <Field label="Marca"><input value={detail.marca} onChange={(e) => updateDetail(index, 'marca', e.target.value)} /></Field>
-            <Field label="Modelo"><input value={detail.modelo} onChange={(e) => updateDetail(index, 'modelo', e.target.value)} /></Field>
-            <Field label="Número de serie"><input value={detail.numero_serie} onChange={(e) => updateDetail(index, 'numero_serie', e.target.value)} /></Field>
-            <Field label="Código patrimonial"><input value={detail.codigo_patrimonial} onChange={(e) => updateDetail(index, 'codigo_patrimonial', e.target.value)} /></Field>
-            <Field label="Condición de salida"><select value={detail.condicion_salida_id} onChange={(e) => updateDetail(index, 'condicion_salida_id', e.target.value)}><option value="">Sin condición</option>{options.conditions.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></Field>
-            <Field label="Calibración de salida" required><select value={detail.calibracion_salida} onChange={(e) => { updateDetail(index, 'calibracion_salida', e.target.value); if (e.target.value !== 'CALIBRADO') updateDetail(index, 'fecha_calibracion_salida', '') }} required><option value="">Seleccionar</option><option value="NO_CUMPLE">No cumple</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
-            <Field label="Fecha de calibración" required={detail.calibracion_salida === 'CALIBRADO'}><input type="date" value={detail.fecha_calibracion_salida} onChange={(e) => updateDetail(index, 'fecha_calibracion_salida', e.target.value)} disabled={detail.calibracion_salida !== 'CALIBRADO'} required={detail.calibracion_salida === 'CALIBRADO'} /></Field>
-            <Field label="Observaciones del equipo" className="span-3"><textarea rows={2} value={detail.observaciones} onChange={(e) => updateDetail(index, 'observaciones', e.target.value)} /></Field>
-          </div>
-          {Number(detail.cantidad) > 1 && (detail.numero_serie || detail.codigo_patrimonial) && <p className="field-hint">Si las unidades tienen series o códigos patrimoniales diferentes, agrégalas como líneas separadas.</p>}
-        </section>)}
-      </div>
-      <Field label="Observaciones generales del envío"><textarea rows={3} value={form.observaciones_salida} onChange={(e) => setForm({ ...form, observaciones_salida: e.target.value })} /></Field>
-      <section className="request-attachments">
-        <div className="request-items-heading"><div><strong>Documentos y firma</strong><small>Los PDF y la firma se guardarán en el expediente privado de la solicitud.</small></div></div>
-        <label className="file-drop">
-          <span>Adjuntar documentos PDF</span>
-          <small>Hasta 10 archivos de 20 MB cada uno.</small>
-          <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => setDocuments(Array.from(event.target.files ?? []).slice(0, 10))} />
-        </label>
-        {!!documents.length && <div className="selected-files">{documents.map((file, index) => <div key={`${file.name}-${index}`}><span>PDF</span><strong>{file.name}</strong><button type="button" onClick={() => setDocuments((current) => current.filter((_, position) => position !== index))}>×</button></div>)}</div>}
-        <SignatureInput value={senderSignature} onChange={setSenderSignature} disabled={saving} />
-        {createdRequest && <p className="field-hint">La solicitud {createdRequest.codigo} ya fue creada. Si una carga falló, vuelve a enviar para continuar con los archivos pendientes sin duplicarla.</p>}
-      </section>
-      <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>{createdRequest ? 'Cerrar; adjuntar después' : 'Cancelar'}</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : createdRequest ? 'Reintentar carga de archivos' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
+      <aside className="request-draft-summary">
+        <h3>Resumen del envío</h3>
+        <div><small>Origen</small><strong>{origin ? `${origin.codigo} · ${origin.almacen.nombre}` : 'Pendiente'}</strong></div>
+        <div><small>Destino</small><strong>{destination ? `${destination.codigo} · ${destination.almacen.nombre}` : 'Pendiente'}</strong></div>
+        <div><small>Fecha</small><strong>{form.fecha_envio ? formatDate(new Date(form.fecha_envio).toISOString(), true) : 'Pendiente'}</strong></div>
+        <div><small>Equipos</small><strong>{details.length} · {details.reduce((sum, detail) => sum + (Number(detail.cantidad) || 0), 0)} unidades</strong></div>
+        <p><span>i</span> El borrador se guarda automáticamente en este navegador. Los archivos y la firma deben seleccionarse nuevamente.</p>
+        {draftSavedAt && <small className="draft-saved">Guardado a las {draftSavedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</small>}
+      </aside>
+
+      <footer className="request-create-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button><button type="button" className="btn btn-secondary" onClick={saveDraft}>Guardar borrador</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : createdRequest ? 'Reintentar carga de archivos' : 'Enviar solicitud'}</button></footer>
     </form>
   </Modal>
   </>
@@ -289,24 +402,85 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
   onReceive: () => void
   onAttach: () => void
 }) {
-  return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
-    <div className="request-detail">
-      <div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div>
-      {item.estado === 'RECHAZADO' && <section className="rejection-detail">
-        <span aria-hidden="true">!</span>
-        <div>
-          <strong>Motivo por el que no fue aprobada</strong>
-          <p>{item.motivo_rechazo}</p>
-          <small>{item.rechazado_por_nombre || 'Logística Lima'}{item.fecha_rechazo ? ` · ${formatDate(item.fecha_rechazo, true)}` : ''}</small>
+  const progress = item.estado === 'RECIBIDO' ? 3 : item.estado === 'EN_CAMINO' ? 2 : 1
+  const fileName = (type: string, original: string) => type === 'DOCUMENTO' ? original : type === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'
+
+  return <Modal wide className="request-review-modal" title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
+    <div className="request-review">
+      <div className="request-progress" aria-label={`Estado: ${stateLabels[item.estado]}`}>
+        {['Solicitud', 'En camino', 'Recibido'].map((label, index) => <div className={`request-progress-step ${progress >= index + 1 ? 'complete' : ''}`} key={label}>
+          <span>{progress >= index + 1 ? '✓' : index + 1}</span><strong>{label}</strong>
+        </div>)}
+        <span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span>
+      </div>
+
+      <div className="request-review-layout">
+        <div className="request-review-content">
+          <section className="request-review-section">
+            <h3>Resumen de {item.estado === 'RECIBIDO' ? 'recepción' : 'solicitud'}</h3>
+            <div className="request-review-summary">
+              <div><span aria-hidden="true">♙</span><p><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></p></div>
+              <div><span aria-hidden="true">□</span><p><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></p></div>
+              <div><span aria-hidden="true">▤</span><p><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></p></div>
+              <div><span aria-hidden="true">→</span><p><small>Origen</small><strong>{item.ubicacion_origen.codigo} · {item.ubicacion_origen.almacen.nombre}</strong></p></div>
+              <div><span aria-hidden="true">⌖</span><p><small>Destino</small><strong>{item.ubicacion_destino.codigo} · {item.ubicacion_destino.almacen.nombre}</strong></p></div>
+              <div><span aria-hidden="true">▣</span><p><small>Transportista</small><strong>{item.transportista || 'No indicado'}</strong></p></div>
+            </div>
+            <div className="request-general-notes"><small>Observaciones generales del envío</small><p>{item.observaciones_salida || 'Sin observaciones.'}</p></div>
+          </section>
+
+          {item.estado === 'RECHAZADO' && <section className="rejection-detail">
+            <span aria-hidden="true">!</span>
+            <div><strong>Motivo por el que no fue aprobada</strong><p>{item.motivo_rechazo}</p><small>{item.rechazado_por_nombre || 'Logística Lima'}{item.fecha_rechazo ? ` · ${formatDate(item.fecha_rechazo, true)}` : ''}</small></div>
+          </section>}
+
+          <section className="request-review-section">
+            <h3>{item.estado === 'RECIBIDO' ? 'Equipos recibidos' : 'Equipos enviados'}</h3>
+            <div className="request-equipment-cards">
+              {item.detalles.map((detail, index) => <article className="request-equipment-card" key={detail.id}>
+                <header><div><span>{index + 1}</span><p><small>Equipo</small><strong>{detail.nombre_equipo}</strong></p></div><b>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</b></header>
+                <div className="request-equipment-data">
+                  <RequestData label="Marca" value={detail.marca} />
+                  <RequestData label="Modelo" value={detail.modelo} />
+                  <RequestData label="Número de serie" value={detail.numero_serie} />
+                  <RequestData label="Código patrimonial" value={detail.codigo_patrimonial} />
+                  <RequestData label="Condición de salida" value={conditionDisplayName(detail.condicion_salida?.nombre)} />
+                  <RequestData label="Calibración de salida" value={detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : null} />
+                  <RequestData label="Fecha de calibración" value={detail.fecha_calibracion_salida ? formatDate(detail.fecha_calibracion_salida) : null} />
+                  <RequestData label="Artículo de inventario" value={detail.inventario ? `${detail.inventario.codigo} · ${detail.inventario.descripcion}` : 'Preingreso sin vincular'} />
+                  {item.estado === 'RECIBIDO' && <>
+                    <RequestData label="Condición de recepción" value={conditionDisplayName(detail.condicion_recepcion?.nombre || detail.condicion_salida?.nombre)} />
+                    <RequestData label="Calibración de recepción" value={detail.calibracion_recepcion ? calibrationLabels[detail.calibracion_recepcion] : detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : null} />
+                    <RequestData label="Fecha de calibración recibida" value={detail.fecha_calibracion_recepcion ? formatDate(detail.fecha_calibracion_recepcion) : detail.fecha_calibracion_salida ? formatDate(detail.fecha_calibracion_salida) : null} />
+                  </>}
+                  <RequestData label="Observaciones del equipo" value={detail.observaciones} wide />
+                </div>
+              </article>)}
+            </div>
+          </section>
+
+          <section className="request-review-section">
+            <h3>Documentos y firmas</h3>
+            {item.archivos.length ? <div className="request-document-grid">{item.archivos.map((file) => {
+              const url = equipmentRequestsApi.fileUrl(item.id, file.id)
+              return <article className="request-document-card" key={file.id}>
+                <div className="request-document-preview">{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={url} alt={fileName(file.tipo, file.nombre_original)} />}</div>
+                <strong>{fileName(file.tipo, file.nombre_original)}</strong>
+                <small>{formatDate(file.creado_en, true)}</small>
+                <small>{(file.tamano_bytes / 1024).toFixed(1)} KB</small>
+                <footer><a href={url} target="_blank" rel="noreferrer" aria-label={`Ver ${fileName(file.tipo, file.nombre_original)}`}>◉</a><a href={url} download={file.nombre_original} aria-label={`Descargar ${fileName(file.tipo, file.nombre_original)}`}>⇩</a></footer>
+              </article>
+            })}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
+          </section>
         </div>
-      </section>}
-      <h3>Equipos</h3>
-      {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
-      <h3>Documentos y firmas</h3>
-      {item.archivos.length ? <div className="request-files">{item.archivos.map((file) => <a key={file.id} href={equipmentRequestsApi.fileUrl(item.id, file.id)} target="_blank" rel="noreferrer" className={file.tipo === 'DOCUMENTO' ? '' : 'signature-file'}>{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={equipmentRequestsApi.fileUrl(item.id, file.id)} alt={file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'} />}<div><strong>{file.tipo === 'DOCUMENTO' ? file.nombre_original : file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'}</strong><small>{formatDate(file.creado_en, true)} · {(file.tamano_bytes / 1024).toFixed(1)} KB</small></div></a>)}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
-      <h3>Historial</h3>
-      <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
-      <div className="request-detail-actions">
+
+        <aside className="request-review-history">
+          <h3>Historial</h3>
+          <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span>✓</span><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre}</small><small>{formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
+        </aside>
+      </div>
+
+      <footer className="request-review-actions">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
         {mine && item.estado === 'ESPERA_APROBACION' && <button type="button" className="btn btn-secondary" onClick={onAttach}>Adjuntar archivos</button>}
         {!mine && item.estado === 'ESPERA_APROBACION' && <>
@@ -314,9 +488,13 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
           <button type="button" className="btn btn-secondary" onClick={onApprove}>Aprobar y enviar</button>
         </>}
         {!mine && item.estado === 'EN_CAMINO' && <button type="button" className="btn btn-primary" onClick={onReceive}>Recibir e ingresar</button>}
-      </div>
+      </footer>
     </div>
   </Modal>
+}
+
+function RequestData({ label, value, wide = false }: { label: string; value: string | null | undefined; wide?: boolean }) {
+  return <div className={`request-data ${wide ? 'wide' : ''}`}><small>{label}</small><strong>{value || 'No indicado'}</strong></div>
 }
 
 function AttachmentRetryForm({ item, onClose, onSaved }: {
