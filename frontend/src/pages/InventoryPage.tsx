@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
@@ -43,6 +43,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<Inventario | null>(null)
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
   const [statusPending, setStatusPending] = useState<Inventario | null>(null)
@@ -61,6 +62,9 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     finally { setLoading(false) }
   }, [applied, page, pageSize])
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
+  }, [page])
 
   const search = (event: FormEvent) => { event.preventDefault(); setPage(1); setApplied(filters) }
   const clear = () => { const next = { q: '', categoria_id: '', ubicacion_id: '', estado: 'activos', calibracion: '', orden: 'desc' }; setFilters(next); setApplied(next); setPage(1) }
@@ -112,7 +116,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     </form>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card inventory-table-card">
       <div className="inventory-table-toolbar"><strong>{data?.total ?? 0} artículos</strong><div><span>Ordenar por ID</span><button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Alternar el orden por ID">{applied.orden === 'desc' ? '↓ Más recientes' : '↑ Más antiguos'}</button></div></div>
-      <div className="table-responsive"><table className="inventory-modern-table"><thead><tr><th>Artículo</th><th>Ubicación</th><th>Disponibilidad</th><th>Control</th><th>Estado</th>{!readOnly && <th>Acciones</th>}<th /></tr></thead>
+      <div className="table-responsive" ref={tableScrollRef}><table className="inventory-modern-table"><thead><tr><th>Artículo</th><th>Tipo de ítem</th><th>Ubicación</th><th>Stock</th><th>Condición</th><th>Calibración</th><th>Estado</th>{!readOnly && <th className="inventory-actions-heading">Acciones</th>}<th /></tr></thead>
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
           return <tr
@@ -130,12 +134,14 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             role="button"
             aria-label={`Ver detalle de ${item.descripcion}`}
           >
-            <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</small><span className="tag inventory-category-tag">{item.categoria.nombre}</span></td>
-            <td><span className="location-code">{item.ubicacion.codigo}</span><small className="item-subtitle">{item.ubicacion.almacen.nombre}</small></td>
-            <td className={low ? 'text-danger' : ''}><strong>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</strong><small className="item-subtitle">{low ? 'Stock bajo' : 'Disponible'}</small></td>
-            <td><small className="inventory-control-condition">{item.condicion?.nombre ?? 'Sin condición'}</small>{item.calibracion && <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span>}</td>
+            <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</small></td>
+            <td><span className="tag">{item.categoria.nombre}</span></td>
+            <td><span className="location-code">{item.ubicacion.codigo}</span></td>
+            <td className={low ? 'text-danger' : ''}><strong>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</strong>{low && <small className="item-subtitle">Stock bajo</small>}</td>
+            <td>{item.condicion?.nombre ?? '—'}</td>
+            <td>{item.calibracion ? <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span> : '—'}</td>
             <td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
-            {!readOnly && <td className="row-actions"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
+            {!readOnly && <td className="row-actions inventory-actions-cell"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
             <td className="inventory-detail-chevron"><KeyboardArrowRightIcon /></td>
           </tr>})}</tbody></table>{!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}</div>
       {data && <div className="pagination inventory-sticky-pagination">
