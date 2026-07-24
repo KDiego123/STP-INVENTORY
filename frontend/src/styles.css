@@ -380,6 +380,8 @@ input:focus, select:focus, textarea:focus { border-color: #4a9a98 !important; bo
 .inventory-modern-table th.inventory-actions-heading { width: 96px; }
 .inventory-modern-table th:last-child { width: 34px; }
 .inventory-modern-table thead { position: sticky; z-index: 4; top: 0; }
+.inventory-modern-table td:nth-child(2) { overflow: hidden; }
+.inventory-category-tag { box-sizing: border-box; width: 100%; max-width: 100%; line-height: 1.25; overflow-wrap: anywhere; text-align: center; white-space: normal; }
 .inventory-detail-chevron { width: 34px; color: #365968; text-align: right; }.inventory-detail-chevron svg { font-size: 22px; }
 .inventory-actions-heading, .inventory-actions-cell { text-align: center; }
 .inventory-actions-cell .inventory-row-actions { justify-content: center; }

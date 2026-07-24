@@ -135,7 +135,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             aria-label={`Ver detalle de ${item.descripcion}`}
           >
             <td><strong className="item-title-static">{item.descripcion}</strong><small className="item-subtitle">{item.codigo}{item.numero_serie ? ` · Serie ${item.numero_serie}` : ''}</small></td>
-            <td><span className="tag">{item.categoria.nombre}</span></td>
+            <td><span className="tag inventory-category-tag" title={item.categoria.nombre}>{item.categoria.nombre}</span></td>
             <td><span className="location-code">{item.ubicacion.codigo}</span></td>
             <td className={low ? 'text-danger' : ''}><strong>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</strong>{low && <small className="item-subtitle">Stock bajo</small>}</td>
             <td>{item.condicion?.nombre ?? '—'}</td>
