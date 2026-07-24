@@ -70,7 +70,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
     <canvas
       ref={canvasRef}
       width={1200}
-      height={800}
+      height={600}
       onPointerDown={start}
       onPointerMove={move}
       onPointerUp={finish}
