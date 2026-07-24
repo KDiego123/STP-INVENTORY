@@ -112,10 +112,6 @@ export type SolicitudEquipoArchivo = {
   mime_type: string
   tamano_bytes: number
   sha256: string
-  estado_almacenamiento: 'PENDIENTE' | 'SINCRONIZADO' | 'ERROR'
-  intentos_sincronizacion: number
-  ultimo_error_sincronizacion: string | null
-  sincronizado_en: string | null
   subido_por_nombre: string
   creado_en: string
 }

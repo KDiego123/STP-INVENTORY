@@ -38,7 +38,6 @@ importacion-excel/004_solicitudes_equipos.sql
 importacion-excel/005_preingreso_equipos.sql
 importacion-excel/006_archivos_solicitudes.sql
 importacion-excel/007_rechazo_solicitudes.sql
-importacion-excel/008_cola_archivos_nextcloud.sql
 ```
 
 La migración `005` desvincula el preingreso del inventario existente, restringe
@@ -47,8 +46,6 @@ La migración `006` agrega metadatos de documentos y firmas; los archivos se
 almacenan en Nextcloud y no dentro de PostgreSQL.
 La migración `007` agrega el estado `RECHAZADO` y conserva el motivo, responsable
 y fecha de las solicitudes que Logística decide no aprobar.
-La migración `008` añade una copia local privada y una cola de reintentos para
-que los documentos sigan disponibles cuando Nextcloud esté temporalmente caído.
 
 ## Importante sobre seguridad
 
@@ -96,14 +93,9 @@ AUTH_ENABLED=false
 NEXTCLOUD_WEBDAV_URL=https://nube.stpingenieria.com.pe/remote.php/dav/files/USUARIO/TI/STP-INVENTORY/
 NEXTCLOUD_USERNAME=USUARIO
 NEXTCLOUD_APP_PASSWORD=CONTRASENA_DE_APLICACION
-LOCAL_FILE_CACHE_DIR=
-FILE_SYNC_INTERVAL_SECONDS=60
 ```
 
 No colocar comillas alrededor de los valores. No compartir ni publicar `.env`.
-Si `LOCAL_FILE_CACHE_DIR` queda vacío, se utiliza
-`backend\data\solicitudes`. Esta carpeta debe incluirse en las copias de
-seguridad del servidor y no se publica en Git.
 
 ## Iniciar
 

@@ -42,13 +42,6 @@ class Settings:
     nextcloud_webdav_url: str = os.getenv("NEXTCLOUD_WEBDAV_URL", "").strip()
     nextcloud_username: str = os.getenv("NEXTCLOUD_USERNAME", "").strip()
     nextcloud_app_password: str = os.getenv("NEXTCLOUD_APP_PASSWORD", "")
-    local_file_cache_dir: str = (
-        os.getenv("LOCAL_FILE_CACHE_DIR", "").strip()
-        or str(BASE_DIR / "data" / "solicitudes")
-    )
-    file_sync_interval_seconds: int = max(
-        15, int(os.getenv("FILE_SYNC_INTERVAL_SECONDS", "60"))
-    )
 
 
 settings = Settings()
