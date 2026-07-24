@@ -1,4 +1,8 @@
 import { useRef, useState } from 'react'
+import AddIcon from '@mui/icons-material/Add'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import DrawIcon from '@mui/icons-material/Draw'
+import UploadIcon from '@mui/icons-material/Upload'
 
 function SignaturePad({ onChange, disabled = false, expanded = false }: {
   onChange: (file: File | null) => void
@@ -22,7 +26,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
   const start = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (disabled) return
     const canvas = event.currentTarget
-    const context = canvas.getContext('2d')
+    const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) return
     const current = point(event)
     drawing.current = true
@@ -33,7 +37,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawing.current || disabled) return
-    const context = event.currentTarget.getContext('2d')
+    const context = event.currentTarget.getContext('2d', { willReadFrequently: true })
     if (!context) return
     const current = point(event)
     context.lineTo(current.x, current.y)
@@ -55,7 +59,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
   }
 
   const exportCroppedSignature = (canvas: HTMLCanvasElement) => {
-    const context = canvas.getContext('2d')
+    const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) return
     const { width, height } = canvas
     const pixels = context.getImageData(0, 0, width, height).data
@@ -106,7 +110,7 @@ function SignaturePad({ onChange, disabled = false, expanded = false }: {
   const clear = () => {
     exportSequence.current += 1
     const canvas = canvasRef.current
-    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    canvas?.getContext('2d', { willReadFrequently: true })?.clearRect(0, 0, canvas.width, canvas.height)
     setHasSignature(false)
     onChange(null)
   }
@@ -158,14 +162,14 @@ export function SignatureInput({ value, onChange, disabled = false }: {
   return <>
     <div className="signature-methods">
       <button type="button" className="signature-method" onClick={openSigning} disabled={disabled}>
-        <span className="signature-method-icon" aria-hidden="true">✎</span>
+        <span className="signature-method-icon" aria-hidden="true"><DrawIcon /></span>
         <span><strong>Firmar aquí</strong><small>Abre un espacio amplio para firmar con mouse, lápiz o dedo.</small></span>
-        <b>→</b>
+        <b><ArrowForwardIcon /></b>
       </button>
       <label className={`signature-method ${disabled ? 'disabled' : ''}`}>
-        <span className="signature-method-icon upload" aria-hidden="true">↑</span>
+        <span className="signature-method-icon upload" aria-hidden="true"><UploadIcon /></span>
         <span><strong>Subir Firma PNG</strong><small>Selecciona una firma guardada de máximo 5 MB.</small></span>
-        <b>＋</b>
+        <b><AddIcon /></b>
         <input
           type="file"
           accept="image/png,.png"

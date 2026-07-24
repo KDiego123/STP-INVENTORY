@@ -1,4 +1,13 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
+import EastIcon from '@mui/icons-material/East'
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined'
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlined'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { ApiError, catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
 import { SignatureInput } from '../components/SignaturePad'
@@ -419,12 +428,12 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
           <section className="request-review-section">
             <h3>Resumen de {item.estado === 'RECIBIDO' ? 'recepción' : 'solicitud'}</h3>
             <div className="request-review-summary">
-              <div><span aria-hidden="true">♙</span><p><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></p></div>
-              <div><span aria-hidden="true">□</span><p><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></p></div>
-              <div><span aria-hidden="true">▤</span><p><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></p></div>
-              <div><span aria-hidden="true">→</span><p><small>Origen</small><strong>{item.ubicacion_origen.codigo} · {item.ubicacion_origen.almacen.nombre}</strong></p></div>
-              <div><span aria-hidden="true">⌖</span><p><small>Destino</small><strong>{item.ubicacion_destino.codigo} · {item.ubicacion_destino.almacen.nombre}</strong></p></div>
-              <div><span aria-hidden="true">▣</span><p><small>Transportista</small><strong>{item.transportista || 'No indicado'}</strong></p></div>
+              <div><span aria-hidden="true"><PersonOutlineIcon /></span><p><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></p></div>
+              <div><span aria-hidden="true"><CalendarMonthOutlinedIcon /></span><p><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></p></div>
+              <div><span aria-hidden="true"><DescriptionOutlinedIcon /></span><p><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></p></div>
+              <div><span aria-hidden="true"><EastIcon /></span><p><small>Origen</small><strong>{item.ubicacion_origen.codigo} · {item.ubicacion_origen.almacen.nombre}</strong></p></div>
+              <div><span aria-hidden="true"><LocationOnOutlinedIcon /></span><p><small>Destino</small><strong>{item.ubicacion_destino.codigo} · {item.ubicacion_destino.almacen.nombre}</strong></p></div>
+              <div><span aria-hidden="true"><LocalShippingOutlinedIcon /></span><p><small>Transportista</small><strong>{item.transportista || 'No indicado'}</strong></p></div>
             </div>
             <div className="request-general-notes"><small>Observaciones generales del envío</small><p>{item.observaciones_salida || 'Sin observaciones.'}</p></div>
           </section>
@@ -464,11 +473,11 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
             {item.archivos.length ? <div className="request-document-grid">{item.archivos.map((file) => {
               const url = equipmentRequestsApi.fileUrl(item.id, file.id)
               return <article className="request-document-card" key={file.id}>
-                <div className="request-document-preview">{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={url} alt={fileName(file.tipo, file.nombre_original)} />}</div>
+                <div className="request-document-preview">{file.tipo === 'DOCUMENTO' ? <span><PictureAsPdfOutlinedIcon /></span> : <img src={url} alt={fileName(file.tipo, file.nombre_original)} />}</div>
                 <strong>{fileName(file.tipo, file.nombre_original)}</strong>
                 <small>{formatDate(file.creado_en, true)}</small>
                 <small>{(file.tamano_bytes / 1024).toFixed(1)} KB</small>
-                <footer><a href={url} target="_blank" rel="noreferrer" aria-label={`Ver ${fileName(file.tipo, file.nombre_original)}`}>◉</a><a href={url} download={file.nombre_original} aria-label={`Descargar ${fileName(file.tipo, file.nombre_original)}`}>⇩</a></footer>
+                <footer><a href={url} target="_blank" rel="noreferrer" aria-label={`Ver ${fileName(file.tipo, file.nombre_original)}`}><VisibilityOutlinedIcon /></a><a href={url} download={file.nombre_original} aria-label={`Descargar ${fileName(file.tipo, file.nombre_original)}`}><DownloadOutlinedIcon /></a></footer>
               </article>
             })}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
           </section>
