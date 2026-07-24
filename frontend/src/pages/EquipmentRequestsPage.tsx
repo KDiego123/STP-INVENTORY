@@ -7,6 +7,7 @@ import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutlined'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { ApiError, catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
@@ -411,6 +412,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
   onReceive: () => void
   onAttach: () => void
 }) {
+  const [expandedEquipment, setExpandedEquipment] = useState<number | null>(null)
   const progress = item.estado === 'RECIBIDO' ? 3 : item.estado === 'EN_CAMINO' ? 2 : 1
   const fileName = (type: string, original: string) => type === 'DOCUMENTO' ? original : type === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'
 
@@ -446,9 +448,16 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
           <section className="request-review-section">
             <h3>{item.estado === 'RECIBIDO' ? 'Equipos recibidos' : 'Equipos enviados'}</h3>
             <div className="request-equipment-cards">
+              <div className="request-equipment-summary-head"><span>Equipo</span><span>Cantidad</span><span>Identificación</span><span>Condición</span><span /></div>
               {item.detalles.map((detail, index) => <article className="request-equipment-card" key={detail.id}>
-                <header><div><span>{index + 1}</span><p><small>Equipo</small><strong>{detail.nombre_equipo}</strong></p></div><b>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</b></header>
-                <div className="request-equipment-data">
+                <button type="button" className="request-equipment-toggle" aria-expanded={expandedEquipment === detail.id} onClick={() => setExpandedEquipment((current) => current === detail.id ? null : detail.id)}>
+                  <div><span>{index + 1}</span><strong>{detail.nombre_equipo}</strong></div>
+                  <b>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</b>
+                  <span>{detail.numero_serie ? `Serie ${detail.numero_serie}` : detail.codigo_patrimonial ? `Patrimonial ${detail.codigo_patrimonial}` : 'Sin identificación'}</span>
+                  <span>{conditionDisplayName(detail.condicion_salida?.nombre) || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span>
+                  <KeyboardArrowDownIcon className={expandedEquipment === detail.id ? 'expanded' : ''} />
+                </button>
+                {expandedEquipment === detail.id && <div className="request-equipment-data">
                   <RequestData label="Marca" value={detail.marca} />
                   <RequestData label="Modelo" value={detail.modelo} />
                   <RequestData label="Número de serie" value={detail.numero_serie} />
@@ -463,7 +472,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
                     <RequestData label="Fecha de calibración recibida" value={detail.fecha_calibracion_recepcion ? formatDate(detail.fecha_calibracion_recepcion) : detail.fecha_calibracion_salida ? formatDate(detail.fecha_calibracion_salida) : null} />
                   </>}
                   <RequestData label="Observaciones del equipo" value={detail.observaciones} wide />
-                </div>
+                </div>}
               </article>)}
             </div>
           </section>
