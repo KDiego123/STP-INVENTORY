@@ -68,6 +68,7 @@ export const equipmentRequestsApi = {
   list: (params: Record<string, string | number>) => api<Paginated<SolicitudEquipo>>('/solicitudes-equipos', { params }),
   create: (body: unknown) => api<SolicitudEquipo>('/solicitudes-equipos', { method: 'POST', body: JSON.stringify(body) }),
   approve: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/aprobar`, { method: 'POST', body: JSON.stringify(body) }),
+  reject: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/rechazar`, { method: 'POST', body: JSON.stringify(body) }),
   receive: (id: number, body: unknown) => api<SolicitudEquipo>(`/solicitudes-equipos/${id}/recibir`, { method: 'POST', body: JSON.stringify(body) }),
   uploadFile: (id: number, tipo: 'DOCUMENTO' | 'FIRMA_REMITENTE' | 'FIRMA_RECEPTOR', file: File, actor: string) => {
     const body = new FormData()

@@ -187,7 +187,7 @@ class PaginatedMovimientos(BaseModel):
     pages: int
 
 
-EstadoSolicitud = Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO"]
+EstadoSolicitud = Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO", "RECHAZADO"]
 EstadoCalibracion = Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"]
 
 
@@ -243,6 +243,17 @@ class SolicitudTransicion(BaseModel):
     usuario_id: int | None = None
     usuario_nombre: str = Field(min_length=1, max_length=150)
     comentario: str | None = None
+
+
+class SolicitudRechazo(BaseModel):
+    usuario_id: int | None = None
+    usuario_nombre: str = Field(min_length=1, max_length=150)
+    motivo: str = Field(min_length=5, max_length=2000)
+
+    @field_validator("motivo")
+    @classmethod
+    def limpiar_motivo(cls, value: str) -> str:
+        return " ".join(value.split())
 
 
 class SolicitudRecepcionDetalle(BaseModel):
@@ -323,6 +334,9 @@ class SolicitudEquipoOut(ORMModel):
     solicitante_nombre: str
     aprobado_por_nombre: str | None
     fecha_aprobacion: datetime | None
+    rechazado_por_nombre: str | None
+    fecha_rechazo: datetime | None
+    motivo_rechazo: str | None
     recibido_por_nombre: str | None
     fecha_recepcion: datetime | None
     observaciones_salida: str | None

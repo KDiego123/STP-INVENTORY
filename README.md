@@ -19,6 +19,7 @@ La aplicación permite:
 - Crear y editar categorías, unidades, ubicaciones y condiciones.
 - Registrar preingresos de uno o varios equipos enviados desde Mina.
 - Aprobar, seguir y recibir envíos, creando o vinculando sus artículos en inventario.
+- No aprobar solicitudes indicando un motivo visible para Mina y conservado en el historial.
 - Conservar marca, modelo, serie, código patrimonial, condición y calibración.
 - Adjuntar PDF y firmas PNG a las solicitudes usando almacenamiento privado en Nextcloud.
 - Firmar desde la misma página con mouse, lápiz o pantalla táctil.
@@ -36,12 +37,15 @@ importacion-excel/003_fecha_calibracion.sql
 importacion-excel/004_solicitudes_equipos.sql
 importacion-excel/005_preingreso_equipos.sql
 importacion-excel/006_archivos_solicitudes.sql
+importacion-excel/007_rechazo_solicitudes.sql
 ```
 
 La migración `005` desvincula el preingreso del inventario existente, restringe
 las cantidades a enteros y añade los datos de identificación de equipos.
 La migración `006` agrega metadatos de documentos y firmas; los archivos se
 almacenan en Nextcloud y no dentro de PostgreSQL.
+La migración `007` agrega el estado `RECHAZADO` y conserva el motivo, responsable
+y fecha de las solicitudes que Logística decide no aprobar.
 
 ## Importante sobre seguridad
 

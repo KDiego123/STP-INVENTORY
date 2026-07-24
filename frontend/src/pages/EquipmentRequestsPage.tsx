@@ -7,7 +7,7 @@ import type { ViewRole } from '../App'
 
 const MINE_ACTOR = 'Almacenero de Mina · Simulación'
 const LIMA_ACTOR = 'Logística Lima · Simulación'
-const stateLabels = { ESPERA_APROBACION: 'Espera de aprobación', EN_CAMINO: 'En camino', RECIBIDO: 'Recibido' } as const
+const stateLabels = { ESPERA_APROBACION: 'Espera de aprobación', EN_CAMINO: 'En camino', RECIBIDO: 'Recibido', RECHAZADO: 'No aprobado' } as const
 const calibrationLabels = { NO_CUMPLE: 'No cumple', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
 
 type RequestDetailDraft = {
@@ -66,6 +66,7 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
   const [selected, setSelected] = useState<SolicitudEquipo | null>(null)
   const [approvalPending, setApprovalPending] = useState<SolicitudEquipo | null>(null)
   const [approving, setApproving] = useState(false)
+  const [rejectionPending, setRejectionPending] = useState<SolicitudEquipo | null>(null)
   const [receiving, setReceiving] = useState<SolicitudEquipo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -95,11 +96,11 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
 
   return <>
     <div className="page-heading"><div><p className="eyebrow">Flujo Mina → Lima</p><h1>Solicitudes de equipos</h1><p>{mine ? 'Registra equipos nuevos y sigue el estado de sus envíos.' : 'Aprueba preingresos y confirma su incorporación al inventario.'}</p></div>{mine && <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ Nueva solicitud</button>}</div>
-    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Tus preingresos simulados' : 'Todas las solicitudes registradas'}</small></div><label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option></select></label></div>
+    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Tus preingresos simulados' : 'Todas las solicitudes registradas'}</small></div><label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option><option value="RECHAZADO">No aprobado</option></select></label></div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> solicitudes encontradas</div>
       <div className="table-responsive"><table><thead><tr><th>Solicitud</th><th>Ruta</th><th>Equipos</th><th>Envío</th><th>Estado</th><th /></tr></thead><tbody>
-        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <button className="btn btn-secondary btn-sm" onClick={() => setApprovalPending(item)}>Aprobar</button>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
+        {data?.items.map((item) => <tr key={item.id}><td><button className="item-title" onClick={() => setSelected(item)}>{item.codigo}</button><small className="item-subtitle">{item.solicitante_nombre}</small></td><td><strong>{item.ubicacion_origen.codigo}</strong><small className="item-subtitle">→ {item.ubicacion_destino.codigo}</small></td><td>{item.detalles.map((detail) => <div className="request-equipment" key={detail.id}><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</small></div>)}</td><td>{formatDate(item.fecha_envio, true)}<small className="item-subtitle">{item.guia || 'Sin guía'}</small></td><td><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span></td><td className="row-actions"><button className="btn btn-ghost btn-sm" onClick={() => setSelected(item)}>Ver</button>{!mine && item.estado === 'ESPERA_APROBACION' && <><button className="btn btn-ghost btn-sm text-danger" onClick={() => setRejectionPending(item)}>No aprobar</button><button className="btn btn-secondary btn-sm" onClick={() => setApprovalPending(item)}>Aprobar</button></>}{!mine && item.estado === 'EN_CAMINO' && <button className="btn btn-primary btn-sm" onClick={() => setReceiving(item)}>Recibir e ingresar</button>}</td></tr>)}
       </tbody></table></div>
       {!data?.items.length && <EmptyState icon="⇢" title="No hay solicitudes" text={mine ? 'Registra el primer envío de equipos nuevos desde Mina.' : 'No existen solicitudes para el filtro seleccionado.'} />}
     </section>}
@@ -109,9 +110,11 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
       mine={mine}
       onClose={() => setSelected(null)}
       onApprove={() => setApprovalPending(selected)}
+      onReject={() => setRejectionPending(selected)}
       onReceive={() => { setSelected(null); setReceiving(selected) }}
     />}
     {approvalPending && <ApprovalConfirmation item={approvalPending} saving={approving} onClose={() => !approving && setApprovalPending(null)} onConfirm={() => void approve()} />}
+    {rejectionPending && <RejectionForm item={rejectionPending} onClose={() => setRejectionPending(null)} onSaved={async () => { setRejectionPending(null); setSelected(null); notify(`${rejectionPending.codigo} no fue aprobada.`); await load() }} />}
     {receiving && <ReceiveForm item={receiving} onClose={() => setReceiving(null)} onSaved={async () => { setReceiving(null); notify('Equipos incorporados al inventario correctamente.'); await load() }} />}
   </>
 }
@@ -241,16 +244,25 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   </>
 }
 
-function RequestDetail({ item, mine, onClose, onApprove, onReceive }: {
+function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive }: {
   item: SolicitudEquipo
   mine: boolean
   onClose: () => void
   onApprove: () => void
+  onReject: () => void
   onReceive: () => void
 }) {
   return <Modal wide title={item.codigo} subtitle={`${item.ubicacion_origen.codigo} → ${item.ubicacion_destino.codigo}`} onClose={onClose}>
     <div className="request-detail">
       <div className="request-detail-summary"><span className={`request-status status-${item.estado.toLowerCase()}`}>{stateLabels[item.estado]}</span><div><small>Solicitante</small><strong>{item.solicitante_nombre}</strong></div><div><small>Fecha de envío</small><strong>{formatDate(item.fecha_envio, true)}</strong></div><div><small>Guía</small><strong>{item.guia || 'Sin guía'}</strong></div></div>
+      {item.estado === 'RECHAZADO' && <section className="rejection-detail">
+        <span aria-hidden="true">!</span>
+        <div>
+          <strong>Motivo por el que no fue aprobada</strong>
+          <p>{item.motivo_rechazo}</p>
+          <small>{item.rechazado_por_nombre || 'Logística Lima'}{item.fecha_rechazo ? ` · ${formatDate(item.fecha_rechazo, true)}` : ''}</small>
+        </div>
+      </section>}
       <h3>Equipos</h3>
       {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
       <h3>Documentos y firmas</h3>
@@ -259,7 +271,10 @@ function RequestDetail({ item, mine, onClose, onApprove, onReceive }: {
       <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
       <div className="request-detail-actions">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
-        {!mine && item.estado === 'ESPERA_APROBACION' && <button type="button" className="btn btn-secondary" onClick={onApprove}>Aprobar y enviar</button>}
+        {!mine && item.estado === 'ESPERA_APROBACION' && <>
+          <button type="button" className="btn btn-ghost text-danger" onClick={onReject}>No aprobar</button>
+          <button type="button" className="btn btn-secondary" onClick={onApprove}>Aprobar y enviar</button>
+        </>}
         {!mine && item.estado === 'EN_CAMINO' && <button type="button" className="btn btn-primary" onClick={onReceive}>Recibir e ingresar</button>}
       </div>
     </div>
@@ -296,6 +311,65 @@ function ApprovalConfirmation({ item, saving, onClose, onConfirm }: {
       <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={saving}>{saving ? 'Aprobando…' : 'Sí, aprobar envío'}</button>
     </div>
   </Modal>
+}
+
+function RejectionForm({ item, onClose, onSaved }: {
+  item: SolicitudEquipo
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const normalizedReason = reason.trim().replace(/\s+/g, ' ')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (normalizedReason.length < 5) {
+      setError('Escribe un motivo de al menos 5 caracteres.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await equipmentRequestsApi.reject(item.id, {
+        usuario_nombre: LIMA_ACTOR,
+        motivo: normalizedReason,
+      })
+      await onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar la decisión.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <>{saving && <ProcessingOverlay title="Registrando decisión" detail="Guardando el motivo en el historial de la solicitud…" />}
+    <Modal compact title={`No aprobar ${item.codigo}`} subtitle="Indica a Mina qué debe revisar o corregir." onClose={onClose}>
+      <form className="rejection-form" onSubmit={submit}>
+        {error && <ErrorNotice message={error} />}
+        <Field label="Motivo" required>
+          <textarea
+            rows={5}
+            maxLength={2000}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ejemplo: falta adjuntar la guía firmada o completar el número de serie."
+            autoFocus
+            required
+          />
+        </Field>
+        <div className="rejection-form-help">
+          <span aria-hidden="true">i</span>
+          <p>La solicitud quedará como <strong>No aprobada</strong>. El motivo será visible para Mina y se conservará en el historial.</p>
+        </div>
+        <div className="form-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button type="submit" className="btn btn-danger" disabled={saving || normalizedReason.length < 5}>Confirmar</button>
+        </div>
+      </form>
+    </Modal>
+  </>
 }
 
 function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClose: () => void; onSaved: () => Promise<void> }) {

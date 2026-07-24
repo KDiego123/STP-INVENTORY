@@ -74,7 +74,7 @@ export type Movimiento = {
   ubicacion_destino: Ubicacion | null
 }
 
-export type EstadoSolicitud = 'ESPERA_APROBACION' | 'EN_CAMINO' | 'RECIBIDO'
+export type EstadoSolicitud = 'ESPERA_APROBACION' | 'EN_CAMINO' | 'RECIBIDO' | 'RECHAZADO'
 
 export type SolicitudEquipoDetalle = {
   id: number
@@ -127,6 +127,9 @@ export type SolicitudEquipo = {
   solicitante_nombre: string
   aprobado_por_nombre: string | null
   fecha_aprobacion: string | null
+  rechazado_por_nombre: string | null
+  fecha_rechazo: string | null
+  motivo_rechazo: string | null
   recibido_por_nombre: string | null
   fecha_recepcion: string | null
   observaciones_salida: string | null

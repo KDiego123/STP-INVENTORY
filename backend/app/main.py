@@ -46,6 +46,7 @@ from .schemas import (
     SolicitudEquipoArchivoOut,
     SolicitudEquipoOut,
     SolicitudRecepcion,
+    SolicitudRechazo,
     SolicitudTransicion,
     TipoMovimientoOut,
     UbicacionCreate,
@@ -487,7 +488,7 @@ def _validar_catalogo_activo(db: Session, modelo, pk: int, nombre: str):
 @app.get("/api/solicitudes-equipos", response_model=PaginatedSolicitudes)
 def solicitudes_listar(
     db: DB,
-    estado: Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO"] | None = None,
+    estado: Literal["ESPERA_APROBACION", "EN_CAMINO", "RECIBIDO", "RECHAZADO"] | None = None,
     solicitante: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
@@ -781,6 +782,39 @@ def solicitud_aprobar(pk: int, datos: SolicitudTransicion, db: DB):
         comentario=datos.comentario.strip() if datos.comentario else "Solicitud aprobada por Logística Lima.",
     ))
     db.commit(); db.refresh(registro)
+    return registro
+
+
+@app.post("/api/solicitudes-equipos/{pk}/rechazar", response_model=SolicitudEquipoOut)
+def solicitud_rechazar(pk: int, datos: SolicitudRechazo, db: DB):
+    registro = db.scalar(
+        select(SolicitudEquipo).where(SolicitudEquipo.id == pk).with_for_update()
+    )
+    if registro is None:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada.")
+    if registro.estado != "ESPERA_APROBACION":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se pueden rechazar solicitudes en espera de aprobación.",
+        )
+    ahora = datetime.now(timezone.utc)
+    registro.estado = "RECHAZADO"
+    registro.rechazado_por_usuario_id = datos.usuario_id
+    registro.rechazado_por_nombre = datos.usuario_nombre.strip()
+    registro.fecha_rechazo = ahora
+    registro.motivo_rechazo = datos.motivo
+    registro.actualizado_en = ahora
+    registro.historial.append(
+        SolicitudEquipoHistorial(
+            estado_anterior="ESPERA_APROBACION",
+            estado_nuevo="RECHAZADO",
+            usuario_id=datos.usuario_id,
+            usuario_nombre=datos.usuario_nombre.strip(),
+            comentario=datos.motivo,
+        )
+    )
+    db.commit()
+    db.refresh(registro)
     return registro
 
 
