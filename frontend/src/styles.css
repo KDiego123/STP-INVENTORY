@@ -369,6 +369,16 @@ input:focus, select:focus, textarea:focus { border-color: #4a9a98 !important; bo
 .inventory-table-toolbar > strong { color: #294857; font-size: 12px; }
 .inventory-table-toolbar > div { display: flex; align-items: center; gap: 8px; }.inventory-table-toolbar > div > span { color: var(--muted); font-size: 9px; font-weight: 700; }
 .inventory-modern-table td { padding-top: 10px; padding-bottom: 10px; }
+.inventory-modern-table { table-layout: fixed; }
+.inventory-modern-table th:nth-child(1) { width: 190px; }
+.inventory-modern-table th:nth-child(2) { width: 105px; }
+.inventory-modern-table th:nth-child(3) { width: 90px; }
+.inventory-modern-table th:nth-child(4) { width: 78px; }
+.inventory-modern-table th:nth-child(5) { width: 98px; }
+.inventory-modern-table th:nth-child(6) { width: 105px; }
+.inventory-modern-table th:nth-child(7) { width: 84px; }
+.inventory-modern-table th.inventory-actions-heading { width: 96px; }
+.inventory-modern-table th:last-child { width: 34px; }
 .inventory-modern-table thead { position: sticky; z-index: 4; top: 0; }
 .inventory-detail-chevron { width: 34px; color: #365968; text-align: right; }.inventory-detail-chevron svg { font-size: 22px; }
 .inventory-actions-heading, .inventory-actions-cell { text-align: center; }
@@ -400,7 +410,7 @@ tbody tr:hover { background: #fafcfd; }
 .calibration-calibrado { color: #187259; background: #e5f5ee; }.calibration-sin_calibrar { color: #a73138; background: #fbe7e9; }.calibration-no_cumple { color: #687983; background: #edf1f3; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
-.inventory-row-actions { display: grid; grid-template-columns: 62px 82px; justify-content: end; }
+.inventory-row-actions { display: grid; grid-template-columns: 82px; justify-content: end; }
 .inventory-row-actions .btn { width: 100%; }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; color: var(--muted); font-size: 11px; }
 .pagination > div { display: flex; gap: 7px; }

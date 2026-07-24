@@ -141,7 +141,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             <td>{item.condicion?.nombre ?? '—'}</td>
             <td>{item.calibracion ? <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span> : '—'}</td>
             <td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
-            {!readOnly && <td className="row-actions inventory-actions-cell"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setEditing(item) }}>Editar</button><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
+            {!readOnly && <td className="row-actions inventory-actions-cell"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
             <td className="inventory-detail-chevron"><KeyboardArrowRightIcon /></td>
           </tr>})}</tbody></table>{!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}</div>
       {data && <div className="pagination inventory-sticky-pagination">
