@@ -13,7 +13,7 @@ const labels: Record<CatalogType, { title: string; singular: string; text: strin
   condiciones: { title: 'Condiciones', singular: 'condición', text: 'Clasifica el estado físico de los artículos.' },
 }
 
-export function CatalogPage({ type, notify }: { type: CatalogType; notify: (message: string, kind?: 'success' | 'error') => void }) {
+export function CatalogPage({ type, notify, embedded = false }: { type: CatalogType; notify: (message: string, kind?: 'success' | 'error') => void; embedded?: boolean }) {
   const [items, setItems] = useState<Item[]>([])
   const [warehouses, setWarehouses] = useState<Almacen[]>([])
   const [editing, setEditing] = useState<Item | 'new' | null>(null)
@@ -42,7 +42,7 @@ export function CatalogPage({ type, notify }: { type: CatalogType; notify: (mess
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo cambiar el estado.', 'error') }
   }
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Configuración</p><h1>{info.title}</h1><p>{info.text}</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nueva {info.singular}</button></div>
+    <div className={`page-heading ${embedded ? 'catalog-embedded-heading' : ''}`}><div>{!embedded && <p className="eyebrow">Configuración</p>}<h1>{info.title}</h1><p>{info.text}</p></div><button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nueva {info.singular}</button></div>
     <div className="filter-bar compact"><label className="search-field"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Buscar ${info.title.toLowerCase()}`} /></label></div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading ? <Loader /> : <section className="card catalog-grid">
       {filtered.map((item) => <article className={`catalog-card ${!item.activo ? 'inactive' : ''}`} key={item.id}>

@@ -1,22 +1,19 @@
 import { type ReactNode, useEffect, useState } from 'react'
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
-import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined'
 import PreviewOutlinedIcon from '@mui/icons-material/PreviewOutlined'
-import StraightenOutlinedIcon from '@mui/icons-material/StraightenOutlined'
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import { CatalogPage } from './pages/CatalogPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InventoryPage } from './pages/InventoryPage'
 import { MovementsPage } from './pages/MovementsPage'
 import { EquipmentRequestsPage } from './pages/EquipmentRequestsPage'
 import { ViewPreviewPage } from './pages/ViewPreviewPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { Toast } from './components'
 
-export type PageKey = 'vista' | 'inicio' | 'inventario' | 'solicitudes' | 'movimientos' | 'categorias' | 'unidades' | 'ubicaciones' | 'condiciones'
+export type PageKey = 'vista' | 'inicio' | 'inventario' | 'solicitudes' | 'movimientos' | 'configuracion'
 export type ViewRole = 'logistica' | 'almacenero'
 
 const navItems: Array<{ key: PageKey; label: string; icon: ReactNode; group?: string; roles?: ViewRole[] }> = [
@@ -25,10 +22,7 @@ const navItems: Array<{ key: PageKey; label: string; icon: ReactNode; group?: st
   { key: 'inventario', label: 'Inventario', icon: <Inventory2OutlinedIcon /> },
   { key: 'solicitudes', label: 'Solicitudes de equipos', icon: <LocalShippingOutlinedIcon /> },
   { key: 'movimientos', label: 'Movimientos', icon: <SwapHorizIcon />, roles: ['logistica'] },
-  { key: 'categorias', label: 'Categorías', icon: <CategoryOutlinedIcon />, group: 'Configuración', roles: ['logistica'] },
-  { key: 'unidades', label: 'Unidades', icon: <StraightenOutlinedIcon />, roles: ['logistica'] },
-  { key: 'ubicaciones', label: 'Ubicaciones', icon: <LocationOnOutlinedIcon />, roles: ['logistica'] },
-  { key: 'condiciones', label: 'Condiciones', icon: <FactCheckOutlinedIcon />, roles: ['logistica'] },
+  { key: 'configuracion', label: 'Configuración', icon: <SettingsOutlinedIcon />, group: 'Administración', roles: ['logistica'] },
 ]
 
 function readPage(): PageKey {
@@ -96,8 +90,7 @@ export default function App() {
         {page === 'inventario' && <InventoryPage notify={notify} readOnly={viewRole === 'almacenero'} />}
         {page === 'solicitudes' && <EquipmentRequestsPage role={viewRole} notify={notify} />}
         {page === 'movimientos' && viewRole === 'logistica' && <MovementsPage notify={notify} />}
-        {viewRole === 'logistica' && (['categorias', 'unidades', 'ubicaciones', 'condiciones'] as PageKey[]).includes(page) &&
-          <CatalogPage type={page as 'categorias' | 'unidades' | 'ubicaciones' | 'condiciones'} notify={notify} />}
+        {page === 'configuracion' && viewRole === 'logistica' && <SettingsPage notify={notify} />}
       </main>
     </div>
     {toast && <Toast {...toast} onClose={() => setToast(null)} />}
