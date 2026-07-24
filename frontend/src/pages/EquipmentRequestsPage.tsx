@@ -69,6 +69,7 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
   const [rejectionPending, setRejectionPending] = useState<SolicitudEquipo | null>(null)
   const [receiving, setReceiving] = useState<SolicitudEquipo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [syncingFiles, setSyncingFiles] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -94,9 +95,24 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
     finally { setApproving(false) }
   }
 
+  const retryFiles = async () => {
+    setSyncingFiles(true)
+    try {
+      const result = await equipmentRequestsApi.retryFiles()
+      notify(result.sincronizados
+        ? `${result.sincronizados} archivo(s) sincronizado(s) con Nextcloud.`
+        : 'No había archivos listos para sincronizar en este momento.')
+      await load()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'No se pudo iniciar la sincronización.', 'error')
+    } finally {
+      setSyncingFiles(false)
+    }
+  }
+
   return <>
     <div className="page-heading"><div><p className="eyebrow">Flujo Mina → Lima</p><h1>Solicitudes de equipos</h1><p>{mine ? 'Registra equipos nuevos y sigue el estado de sus envíos.' : 'Aprueba preingresos y confirma su incorporación al inventario.'}</p></div>{mine && <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ Nueva solicitud</button>}</div>
-    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Tus preingresos simulados' : 'Todas las solicitudes registradas'}</small></div><label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option><option value="RECHAZADO">No aprobado</option></select></label></div>
+    <div className="requests-toolbar card"><div><span className={`role-chip ${mine ? 'mine' : 'lima'}`}>{mine ? 'Vista Mina' : 'Vista Lima'}</span><small>{mine ? 'Tus preingresos simulados' : 'Todas las solicitudes registradas'}</small></div><div className="requests-toolbar-actions">{!mine && <button type="button" className="btn btn-secondary btn-sm" disabled={syncingFiles} onClick={() => void retryFiles()}>{syncingFiles ? 'Sincronizando…' : '↻ Sincronizar archivos'}</button>}<label><span>Estado</span><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option value="">Todos</option><option value="ESPERA_APROBACION">Espera de aprobación</option><option value="EN_CAMINO">En camino</option><option value="RECIBIDO">Recibido</option><option value="RECHAZADO">No aprobado</option></select></label></div></div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> solicitudes encontradas</div>
       <div className="table-responsive"><table><thead><tr><th>Solicitud</th><th>Ruta</th><th>Equipos</th><th>Envío</th><th>Estado</th><th /></tr></thead><tbody>
@@ -262,7 +278,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive }: 
       <h3>Equipos</h3>
       {item.detalles.map((detail) => <div className="request-detail-equipment" key={detail.id}><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo].filter(Boolean).join(' · ') || 'Sin marca/modelo'}{detail.inventario ? ` · ${detail.inventario.codigo}` : ' · Preingreso'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span><span>{detail.numero_serie || detail.codigo_patrimonial || 'Sin identificación'}</span><span>{detail.condicion_salida?.nombre || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span></div>)}
       <h3>Documentos y firmas</h3>
-      {item.archivos.length ? <div className="request-files">{item.archivos.map((file) => <a key={file.id} href={equipmentRequestsApi.fileUrl(item.id, file.id)} target="_blank" rel="noreferrer" className={file.tipo === 'DOCUMENTO' ? '' : 'signature-file'}>{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={equipmentRequestsApi.fileUrl(item.id, file.id)} alt={file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'} />}<div><strong>{file.tipo === 'DOCUMENTO' ? file.nombre_original : file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'}</strong><small>{formatDate(file.creado_en, true)} · {(file.tamano_bytes / 1024).toFixed(1)} KB</small></div></a>)}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
+      {item.archivos.length ? <div className="request-files">{item.archivos.map((file) => <a key={file.id} href={equipmentRequestsApi.fileUrl(item.id, file.id)} target="_blank" rel="noreferrer" className={file.tipo === 'DOCUMENTO' ? '' : 'signature-file'}>{file.tipo === 'DOCUMENTO' ? <span>PDF</span> : <img src={equipmentRequestsApi.fileUrl(item.id, file.id)} alt={file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'} />}<div><strong>{file.tipo === 'DOCUMENTO' ? file.nombre_original : file.tipo === 'FIRMA_REMITENTE' ? 'Firma del remitente' : 'Firma del receptor'}</strong><small>{formatDate(file.creado_en, true)} · {(file.tamano_bytes / 1024).toFixed(1)} KB</small><em className={`storage-status storage-${file.estado_almacenamiento.toLowerCase()}`}>{file.estado_almacenamiento === 'SINCRONIZADO' ? '✓ Nextcloud sincronizado' : file.estado_almacenamiento === 'PENDIENTE' ? '↻ Pendiente de sincronización' : '! Sincronización en reintento'}</em></div></a>)}</div> : <p className="request-files-empty">No se adjuntaron documentos ni firmas.</p>}
       <h3>Historial</h3>
       <div className="request-history">{[...item.historial].sort((a, b) => a.creado_en.localeCompare(b.creado_en)).map((entry) => <div key={entry.id}><span /><div><strong>{stateLabels[entry.estado_nuevo]}</strong><small>{entry.usuario_nombre} · {formatDate(entry.creado_en, true)}</small>{entry.comentario && <p>{entry.comentario}</p>}</div></div>)}</div>
       <div className="request-detail-actions">

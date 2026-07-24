@@ -256,6 +256,18 @@ class SolicitudEquipoArchivo(Base):
     sha256: Mapped[str] = mapped_column(String(64))
     nextcloud_file_id: Mapped[str | None] = mapped_column(String(255))
     nextcloud_etag: Mapped[str | None] = mapped_column(String(255))
+    estado_almacenamiento: Mapped[str] = mapped_column(
+        String(20), default="SINCRONIZADO"
+    )
+    ruta_local: Mapped[str | None] = mapped_column(Text)
+    intentos_sincronizacion: Mapped[int] = mapped_column(Integer, default=0)
+    ultimo_error_sincronizacion: Mapped[str | None] = mapped_column(Text)
+    ultimo_intento_en: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sincronizado_en: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     subido_por_usuario_id: Mapped[int | None] = mapped_column(BigInteger)
     subido_por_nombre: Mapped[str] = mapped_column(String(150))
     creado_en: Mapped[datetime] = mapped_column(
