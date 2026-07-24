@@ -261,7 +261,6 @@ tbody tr:hover { background: #fafcfd; }
 .badge { display: inline-block; margin: 2px 4px 2px 0; padding: 5px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .badge-success { color: #187259; background: #e5f5ee; }.badge-neutral { color: #687983; background: #edf1f3; }.badge-danger { color: #a73138; background: #fbe7e9; }
 .calibration-calibrado { color: #187259; background: #e5f5ee; }.calibration-sin_calibrar { color: #96621c; background: #fff2d9; }.calibration-no_cumple { color: #a73138; background: #fbe7e9; }
-.calibration-date { display: block; margin-top: 3px; color: var(--muted); white-space: nowrap; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
 .inventory-row-actions { display: grid; grid-template-columns: 62px 82px; justify-content: end; }
