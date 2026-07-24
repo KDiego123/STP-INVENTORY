@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 
-export function SignaturePad({ onChange, disabled = false }: {
+function SignaturePad({ onChange, disabled = false, expanded = false }: {
   onChange: (file: File | null) => void
   disabled?: boolean
+  expanded?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
@@ -61,15 +62,15 @@ export function SignaturePad({ onChange, disabled = false }: {
     onChange(null)
   }
 
-  return <div className="signature-pad">
+  return <div className={`signature-pad ${expanded ? 'signature-pad-expanded' : ''}`}>
     <div className="signature-pad-heading">
       <div><strong>Firmar aquí</strong><small>Usa el mouse, lápiz o dedo.</small></div>
       <button type="button" className="btn btn-ghost btn-sm" onClick={clear} disabled={!hasSignature || disabled}>Limpiar</button>
     </div>
     <canvas
       ref={canvasRef}
-      width={1000}
-      height={320}
+      width={1200}
+      height={800}
       onPointerDown={start}
       onPointerMove={move}
       onPointerUp={finish}
@@ -78,4 +79,75 @@ export function SignaturePad({ onChange, disabled = false }: {
     />
     <span className="signature-line">Firma</span>
   </div>
+}
+
+export function SignatureInput({ value, onChange, disabled = false }: {
+  value: File | null
+  onChange: (file: File | null) => void
+  disabled?: boolean
+}) {
+  const [signing, setSigning] = useState(false)
+  const [draft, setDraft] = useState<File | null>(null)
+
+  const openSigning = () => {
+    setDraft(null)
+    setSigning(true)
+  }
+
+  const closeSigning = () => {
+    setDraft(null)
+    setSigning(false)
+  }
+
+  const useSignature = () => {
+    if (!draft) return
+    onChange(draft)
+    setSigning(false)
+    setDraft(null)
+  }
+
+  return <>
+    <div className="signature-methods">
+      <button type="button" className="signature-method" onClick={openSigning} disabled={disabled}>
+        <span className="signature-method-icon" aria-hidden="true">✎</span>
+        <span><strong>Firmar aquí</strong><small>Abre un espacio amplio para firmar con mouse, lápiz o dedo.</small></span>
+        <b>→</b>
+      </button>
+      <label className={`signature-method ${disabled ? 'disabled' : ''}`}>
+        <span className="signature-method-icon upload" aria-hidden="true">↑</span>
+        <span><strong>Subir Firma PNG</strong><small>Selecciona una firma guardada de máximo 5 MB.</small></span>
+        <b>＋</b>
+        <input
+          type="file"
+          accept="image/png,.png"
+          disabled={disabled}
+          onChange={(event) => {
+            onChange(event.target.files?.[0] ?? null)
+            event.currentTarget.value = ''
+          }}
+        />
+      </label>
+    </div>
+    {value && <div className="signature-selection">
+      <span aria-hidden="true">✓</span>
+      <div><strong>Firma preparada</strong><small>{value.name}</small></div>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange(null)} disabled={disabled}>Quitar</button>
+    </div>}
+    {signing && <div className="signature-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Firmar aquí">
+      <section className="signature-dialog">
+        <header>
+          <div><p className="eyebrow">Firma electrónica</p><h2>Firmar aquí</h2><p>Firma dentro del recuadro usando el mouse, lápiz o dedo.</p></div>
+          <button type="button" className="icon-button" onClick={closeSigning} aria-label="Cerrar">×</button>
+        </header>
+        <div className="signature-dialog-body">
+          <SignaturePad onChange={setDraft} expanded />
+          <p className="signature-dialog-hint">Procura que la firma quede centrada y no toque los bordes.</p>
+        </div>
+        <footer>
+          <button type="button" className="btn btn-ghost" onClick={closeSigning}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={useSignature} disabled={!draft}>Usar esta firma</button>
+        </footer>
+      </section>
+    </div>}
+  </>
 }

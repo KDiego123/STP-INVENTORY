@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { catalogsApi, equipmentRequestsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
-import { SignaturePad } from '../components/SignaturePad'
+import { SignatureInput } from '../components/SignaturePad'
 import type { Catalogo, Inventario, Paginated, SolicitudEquipo, Ubicacion, Unidad } from '../types'
 import type { ViewRole } from '../App'
 
@@ -231,11 +231,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => setDocuments(Array.from(event.target.files ?? []).slice(0, 10))} />
         </label>
         {!!documents.length && <div className="selected-files">{documents.map((file, index) => <div key={`${file.name}-${index}`}><span>PDF</span><strong>{file.name}</strong><button type="button" onClick={() => setDocuments((current) => current.filter((_, position) => position !== index))}>×</button></div>)}</div>}
-        <div className="signature-options">
-          <SignaturePad onChange={setSenderSignature} disabled={saving} />
-          <label className="signature-upload"><strong>O subir firma PNG</strong><small>Selecciona una imagen existente de máximo 5 MB.</small><input type="file" accept="image/png,.png" onChange={(event) => setSenderSignature(event.target.files?.[0] ?? null)} /></label>
-        </div>
-        {senderSignature && <p className="signature-ready">✓ Firma del remitente preparada: {senderSignature.name}</p>}
+        <SignatureInput value={senderSignature} onChange={setSenderSignature} disabled={saving} />
         {createdRequest && <p className="field-hint">La solicitud {createdRequest.codigo} ya fue creada. Si una carga falló, vuelve a enviar para continuar con los archivos pendientes sin duplicarla.</p>}
       </section>
       <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Enviando…' : `Enviar solicitud con ${details.length} equipo${details.length === 1 ? '' : 's'}`}</button></div>
@@ -453,11 +449,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
       <section className="request-attachments">
         <div className="request-items-heading"><div><strong>Conformidad del receptor</strong><small>Firma en la pantalla o adjunta un PNG existente.</small></div></div>
         {signatureUploaded ? <p className="signature-ready">✓ La firma del receptor ya está almacenada.</p> : <>
-          <div className="signature-options">
-            <SignaturePad onChange={setReceiverSignature} disabled={saving} />
-            <label className="signature-upload"><strong>O subir firma PNG</strong><small>Selecciona una imagen existente de máximo 5 MB.</small><input type="file" accept="image/png,.png" onChange={(event) => setReceiverSignature(event.target.files?.[0] ?? null)} /></label>
-          </div>
-          {receiverSignature && <p className="signature-ready">✓ Firma preparada: {receiverSignature.name}</p>}
+          <SignatureInput value={receiverSignature} onChange={setReceiverSignature} disabled={saving} />
         </>}
       </section>
       <div className="inventory-entry-notice"><strong>Esta confirmación modifica inventario.</strong><span>Se creará una entrada por cada equipo y la operación quedará vinculada a {item.codigo}.</span></div>
