@@ -1009,7 +1009,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
           </div>
           <div className="reception-stock-preview">
             <div><small>Stock actual</small><strong>{linkedInventory ? formatNumber(currentStock) : entry.accion === 'CREAR' ? '0' : 'Selecciona un artículo'}</strong></div>
-            <span>＋ {formatNumber(receivedQuantity)}</span>
+            <div className="received-quantity"><small>Cantidad recibida</small><strong>+ {formatNumber(receivedQuantity)} {detail.unidad_medida.codigo}</strong></div>
             <div><small>Stock posterior</small><strong>{linkedInventory || entry.accion === 'CREAR' ? formatNumber(projectedStock) : '—'}</strong></div>
             <div><small>Costo promedio posterior</small><strong>{linkedInventory || entry.accion === 'CREAR' ? `S/ ${projectedCost.toFixed(2)}` : '—'}</strong></div>
           </div>
