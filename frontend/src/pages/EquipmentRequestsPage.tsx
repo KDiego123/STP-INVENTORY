@@ -95,7 +95,7 @@ const newDetail = (unitId = ''): RequestDetailDraft => ({
   observaciones: '',
 })
 
-const inventoryOptionLabel = (item: Inventario) => `${item.codigo} · ${item.descripcion}`
+const inventoryOptionLabel = (item: Inventario) => `${item.descripcion} · ${item.codigo}`
 
 function normalizeSearch(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -194,7 +194,7 @@ function InventoryAutocomplete({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(item)}
             >
-              <span><strong>{item.codigo}</strong><small>{item.descripcion}</small></span>
+              <span><strong>{item.descripcion}</strong><small>{item.codigo}</small></span>
               <span><b>{item.ubicacion.codigo}</b><small>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</small></span>
             </button>)
           : <div className="inventory-suggestion-state">No encontramos equipos con esa búsqueda.</div>}
