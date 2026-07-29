@@ -156,6 +156,19 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .inventory-link-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .inventory-link-modes button { min-height: 36px; padding: 7px 10px; border: 1px solid #ccdce1; border-radius: 8px; color: #526c78; background: white; font-size: 10px; font-weight: 800; }
 .inventory-link-modes button.active { border-color: #268d86; color: white; background: #1b857d; box-shadow: 0 5px 14px rgba(27, 133, 125, .16); }
+.inventory-autocomplete { position: relative; display: grid; gap: 6px; }
+.inventory-autocomplete-input { position: relative; }
+.inventory-autocomplete-input input { width: 100%; padding-right: 42px; }
+.inventory-autocomplete-input > button { position: absolute; top: 50%; right: 5px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; transform: translateY(-50%); border: 0; border-radius: 7px; color: #486775; background: transparent; }
+.inventory-autocomplete-input > button:hover { color: #147970; background: #edf7f5; }
+.inventory-autocomplete-input svg { width: 19px; height: 19px; transition: transform .16s ease; }.inventory-autocomplete.open .inventory-autocomplete-input svg { transform: rotate(180deg); }
+.inventory-suggestions { display: grid; max-height: 260px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #c8dce0; border-radius: 10px; background: white; box-shadow: 0 13px 28px rgba(20, 52, 67, .14); scrollbar-width: thin; }
+.inventory-suggestions > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; min-height: 54px; padding: 9px 12px; border: 0; border-bottom: 1px solid #e8eef0; border-radius: 0; color: #294857; text-align: left; background: white; }
+.inventory-suggestions > button:last-child { border-bottom: 0; }.inventory-suggestions > button:hover, .inventory-suggestions > button.active { background: #f0f8f7; }.inventory-suggestions > button.selected { box-shadow: inset 3px 0 #1b857d; background: #e9f6f3; }
+.inventory-suggestions > button > span { display: grid; gap: 2px; min-width: 0; }.inventory-suggestions > button > span:last-child { justify-items: end; }
+.inventory-suggestions strong { overflow: hidden; color: #0e696a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.inventory-suggestions b { color: #42636f; font-size: 10px; }.inventory-suggestions small { overflow: hidden; color: #6b8089; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-suggestion-state { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 64px; padding: 14px; color: #71858d; font-size: 10px; text-align: center; }
+.inventory-search-help { color: #71858d; font-size: 9px; }
 .linked-inventory-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid #d9e6e9; border-radius: 9px; background: white; }
 .linked-inventory-summary > div { display: grid; gap: 3px; min-width: 0; padding: 10px; border-right: 1px solid #e5edef; }.linked-inventory-summary > div:last-child { border-right: 0; }
 .linked-inventory-summary small { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }.linked-inventory-summary strong { overflow: hidden; color: #294e5d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }

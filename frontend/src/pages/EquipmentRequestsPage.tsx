@@ -97,6 +97,111 @@ const newDetail = (unitId = ''): RequestDetailDraft => ({
 
 const inventoryOptionLabel = (item: Inventario) => `${item.codigo} · ${item.descripcion}`
 
+function normalizeSearch(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function InventoryAutocomplete({
+  id,
+  items,
+  value,
+  selectedId,
+  loading,
+  onSearch,
+  onSelect,
+}: {
+  id: string
+  items: Inventario[]
+  value: string
+  selectedId: string
+  loading: boolean
+  onSearch: (value: string) => void
+  onSelect: (item: Inventario) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const query = normalizeSearch(value)
+  const matches = items.filter((item) => {
+    if (!query) return true
+    return normalizeSearch([
+      item.codigo,
+      item.descripcion,
+      item.ubicacion.codigo,
+      item.ubicacion.almacen.nombre,
+    ].join(' ')).includes(query)
+  })
+
+  const choose = (item: Inventario) => {
+    onSelect(item)
+    setOpen(false)
+    setActiveIndex(0)
+  }
+
+  return <div
+    className={`inventory-autocomplete${open ? ' open' : ''}`}
+    onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+    }}
+  >
+    <div className="inventory-autocomplete-input">
+      <input
+        id={id}
+        value={value}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          onSearch(event.target.value)
+          setOpen(true)
+          setActiveIndex(0)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            setOpen(true)
+            setActiveIndex((current) => Math.min(current + 1, Math.max(matches.length - 1, 0)))
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            setActiveIndex((current) => Math.max(current - 1, 0))
+          } else if (event.key === 'Enter' && open && matches[activeIndex]) {
+            event.preventDefault()
+            choose(matches[activeIndex])
+          } else if (event.key === 'Escape') {
+            setOpen(false)
+          }
+        }}
+        placeholder={loading ? 'Cargando equipos…' : 'Buscar por código, descripción o ubicación'}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={`${id}-options`}
+        aria-autocomplete="list"
+        disabled={loading}
+        required
+      />
+      <button type="button" tabIndex={-1} aria-label={open ? 'Cerrar sugerencias' : 'Mostrar sugerencias'} onClick={() => setOpen((current) => !current)}>
+        <KeyboardArrowDownIcon />
+      </button>
+    </div>
+    {open && <div className="inventory-suggestions" id={`${id}-options`} role="listbox">
+      {loading
+        ? <div className="inventory-suggestion-state"><span className="inline-spinner" /> Cargando equipos…</div>
+        : matches.length
+          ? matches.map((item, index) => <button
+              type="button"
+              role="option"
+              aria-selected={String(item.id) === selectedId}
+              className={`${index === activeIndex ? 'active' : ''}${String(item.id) === selectedId ? ' selected' : ''}`}
+              key={item.id}
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(item)}
+            >
+              <span><strong>{item.codigo}</strong><small>{item.descripcion}</small></span>
+              <span><b>{item.ubicacion.codigo}</b><small>{formatNumber(item.stock_actual)} {item.unidad_medida.codigo}</small></span>
+            </button>)
+          : <div className="inventory-suggestion-state">No encontramos equipos con esa búsqueda.</div>}
+    </div>}
+  </div>
+}
+
 function localDateTime() {
   const now = new Date()
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
@@ -238,16 +343,10 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }, [])
 
   useEffect(() => {
-    if (!form.ubicacion_destino_id) {
-      setInventory([])
-      return
-    }
     let cancelled = false
-    setInventory([])
     setInventoryLoading(true)
     inventoryApi.list({
       estado: 'activos',
-      ubicacion_id: Number(form.ubicacion_destino_id),
       page: 1,
       page_size: 500,
     }).then((result) => {
@@ -255,12 +354,12 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         setInventory(result.items.filter((item) => item.categoria.nombre.trim().toUpperCase() === 'EQUIPO'))
       }
     }).catch((err) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : 'No se cargó el inventario del destino.')
+      if (!cancelled) setError(err instanceof Error ? err.message : 'No se cargaron los equipos del inventario.')
     }).finally(() => {
       if (!cancelled) setInventoryLoading(false)
     })
     return () => { cancelled = true }
-  }, [form.ubicacion_destino_id])
+  }, [])
 
   useEffect(() => {
     if (createdRequest) return
@@ -280,18 +379,18 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
   const changeDestination = (destinationId: string) => {
     setForm((current) => ({ ...current, ubicacion_destino_id: destinationId }))
-    setDetails((current) => current.map((detail) => detail.modo_inventario === 'EXISTENTE' ? {
+  }
+  const searchInventory = (index: number, value: string) => {
+    setDetails((current) => current.map((detail, position) => position !== index ? detail : {
       ...detail,
       inventario_id: '',
-      inventario_busqueda: '',
+      inventario_busqueda: value,
       nombre_equipo: '',
       costo_unitario: '',
-    } : detail))
-    setCollapsedDetails((current) => current.map(() => false))
+    }))
   }
-  const selectInventory = (index: number, value: string) => {
-    const selected = inventory.find((item) => inventoryOptionLabel(item) === value)
-    setDetails((current) => current.map((detail, position) => position !== index ? detail : selected ? {
+  const selectInventory = (index: number, selected: Inventario) => {
+    setDetails((current) => current.map((detail, position) => position !== index ? detail : {
       ...detail,
       modo_inventario: 'EXISTENTE',
       inventario_id: String(selected.id),
@@ -306,12 +405,6 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         : detail.condicion_salida_id,
       calibracion_salida: selected.calibracion ?? detail.calibracion_salida,
       fecha_calibracion_salida: selected.fecha_calibracion ?? detail.fecha_calibracion_salida,
-    } : {
-      ...detail,
-      inventario_id: '',
-      inventario_busqueda: value,
-      nombre_equipo: '',
-      costo_unitario: '',
     }))
   }
   const changeInventoryMode = (index: number, mode: RequestDetailDraft['modo_inventario']) => {
@@ -475,17 +568,19 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
                     <button type="button" className={detail.modo_inventario === 'NUEVO' ? 'active' : ''} onClick={() => changeInventoryMode(index, 'NUEVO')}>Registrar artículo nuevo</button>
                   </div>
                   {detail.modo_inventario === 'EXISTENTE' ? <>
-                    <Field label="Buscar por código o descripción" required>
-                      <input
-                        list={`inventory-options-${index}`}
+                    <div className="field">
+                      <span>Buscar por código, descripción o ubicación <b>*</b></span>
+                      <InventoryAutocomplete
+                        id={`inventory-search-${index}`}
+                        items={inventory}
                         value={detail.inventario_busqueda}
-                        onChange={(event) => selectInventory(index, event.target.value)}
-                        placeholder={!form.ubicacion_destino_id ? 'Selecciona primero el destino' : inventoryLoading ? 'Cargando inventario…' : 'Escribe para buscar'}
-                        disabled={!form.ubicacion_destino_id || inventoryLoading}
-                        required
+                        selectedId={detail.inventario_id}
+                        loading={inventoryLoading}
+                        onSearch={(value) => searchInventory(index, value)}
+                        onSelect={(item) => selectInventory(index, item)}
                       />
-                    </Field>
-                    <datalist id={`inventory-options-${index}`}>{inventory.map((item) => <option value={inventoryOptionLabel(item)} key={item.id}>{item.codigo}</option>)}</datalist>
+                      <small className="inventory-search-help">Se muestran equipos activos de todas las ubicaciones.</small>
+                    </div>
                     {linkedInventory && <div className="linked-inventory-summary">
                       <div><small>Código</small><strong>{linkedInventory.codigo}</strong></div>
                       <div><small>Stock actual</small><strong>{formatNumber(linkedInventory.stock_actual)} {linkedInventory.unidad_medida.codigo}</strong></div>
@@ -833,7 +928,7 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
     Promise.all([catalogsApi.conditions(), inventoryApi.list({ estado: 'activos', page: 1, page_size: 500 }), inventoryApi.nextCode()])
       .then(([conditionOptions, inventoryResult, next]) => {
         setConditions(conditionOptions)
-        setInventory(inventoryResult.items.filter((candidate) => candidate.categoria.nombre.trim().toUpperCase() === 'EQUIPO' && candidate.ubicacion_id === item.ubicacion_destino.id))
+        setInventory(inventoryResult.items.filter((candidate) => candidate.categoria.nombre.trim().toUpperCase() === 'EQUIPO'))
         setEntries((current) => Object.fromEntries(item.detalles.map((detail, index) => [detail.id, { ...current[detail.id], codigo_inventario: current[detail.id].codigo_inventario || sequentialCode(next.codigo, index) }])) as Record<number, ReceptionDraft>)
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'No se cargaron las opciones de recepción.'))

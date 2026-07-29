@@ -750,14 +750,6 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
                     status_code=400,
                     detail=f"{inventario_vinculado.codigo} no pertenece a la categoría EQUIPO.",
                 )
-            if inventario_vinculado.ubicacion_id != datos.ubicacion_destino_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        f"{inventario_vinculado.codigo} pertenece a "
-                        f"{inventario_vinculado.ubicacion.codigo}, no al destino seleccionado."
-                    ),
-                )
             if inventario_vinculado.unidad_medida_id != detalle.unidad_medida_id:
                 raise HTTPException(
                     status_code=409,
@@ -950,14 +942,6 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                         detail=(
                             f"{inventario.codigo} usa la unidad "
                             f"{inventario.unidad_medida.codigo}, distinta al preingreso."
-                        ),
-                    )
-                if inventario.ubicacion_id != destino.id:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            f"{inventario.codigo} está en {inventario.ubicacion.codigo}; "
-                            f"la recepción corresponde a {destino.codigo}."
                         ),
                     )
             else:
