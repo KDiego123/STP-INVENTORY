@@ -296,7 +296,9 @@ class SolicitudEquipoDetalleOut(ORMModel):
     numero_serie: str | None
     codigo_patrimonial: str | None
     cantidad: int
-    costo_unitario_declarado: Decimal
+    # Las solicitudes creadas antes de la migración 008 pueden conservar NULL
+    # hasta que el administrador ejecute la normalización de datos.
+    costo_unitario_declarado: Decimal | None
     calibracion_salida: str | None
     fecha_calibracion_salida: date | None
     calibracion_recepcion: str | None

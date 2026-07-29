@@ -87,7 +87,7 @@ export type SolicitudEquipoDetalle = {
   numero_serie: string | null
   codigo_patrimonial: string | null
   cantidad: number
-  costo_unitario_declarado: string
+  costo_unitario_declarado: string | null
   calibracion_salida: Inventario['calibracion']
   fecha_calibracion_salida: string | null
   calibracion_recepcion: Inventario['calibracion']
