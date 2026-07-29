@@ -63,6 +63,9 @@ export type Movimiento = {
   cantidad: string
   stock_anterior: string | null
   stock_posterior: string | null
+  costo_unitario_anterior: string | null
+  costo_unitario_ingreso: string | null
+  costo_unitario_posterior: string | null
   responsable: string | null
   motivo: string | null
   documento: string | null
@@ -84,6 +87,7 @@ export type SolicitudEquipoDetalle = {
   numero_serie: string | null
   codigo_patrimonial: string | null
   cantidad: number
+  costo_unitario_declarado: string
   calibracion_salida: Inventario['calibracion']
   fecha_calibracion_salida: string | null
   calibracion_recepcion: Inventario['calibracion']

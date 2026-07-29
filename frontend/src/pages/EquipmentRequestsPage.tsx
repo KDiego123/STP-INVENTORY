@@ -21,6 +21,9 @@ const stateLabels = { ESPERA_APROBACION: 'Espera de aprobación', EN_CAMINO: 'En
 const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
 
 type RequestDetailDraft = {
+  modo_inventario: 'EXISTENTE' | 'NUEVO'
+  inventario_id: string
+  inventario_busqueda: string
   nombre_equipo: string
   marca: string
   modelo: string
@@ -28,6 +31,7 @@ type RequestDetailDraft = {
   codigo_patrimonial: string
   unidad_medida_id: string
   cantidad: string
+  costo_unitario: string
   condicion_salida_id: string
   calibracion_salida: string
   fecha_calibracion_salida: string
@@ -57,13 +61,26 @@ const REQUEST_DRAFT_KEY = 'inventory-equipment-request-draft'
 function readRequestDraft(): { form: RequestHeaderDraft; details: RequestDetailDraft[]; collapsed: boolean[] } | null {
   try {
     const value = localStorage.getItem(REQUEST_DRAFT_KEY)
-    return value ? JSON.parse(value) : null
+    if (!value) return null
+    const parsed = JSON.parse(value)
+    if (!parsed?.form || !Array.isArray(parsed.details)) return null
+    return {
+      form: parsed.form,
+      details: parsed.details.map((detail: Partial<RequestDetailDraft>) => ({
+        ...newDetail(detail.unidad_medida_id),
+        ...detail,
+      })),
+      collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [],
+    }
   } catch {
     return null
   }
 }
 
 const newDetail = (unitId = ''): RequestDetailDraft => ({
+  modo_inventario: 'EXISTENTE',
+  inventario_id: '',
+  inventario_busqueda: '',
   nombre_equipo: '',
   marca: '',
   modelo: '',
@@ -71,11 +88,14 @@ const newDetail = (unitId = ''): RequestDetailDraft => ({
   codigo_patrimonial: '',
   unidad_medida_id: unitId,
   cantidad: '1',
+  costo_unitario: '',
   condicion_salida_id: '',
   calibracion_salida: '',
   fecha_calibracion_salida: '',
   observaciones: '',
 })
+
+const inventoryOptionLabel = (item: Inventario) => `${item.codigo} · ${item.descripcion}`
 
 function localDateTime() {
   const now = new Date()
@@ -193,6 +213,8 @@ export function EquipmentRequestsPage({ role, notify }: { role: ViewRole; notify
 function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
   const [initialDraft] = useState(readRequestDraft)
   const [options, setOptions] = useState<{ locations: Ubicacion[]; conditions: Catalogo[]; units: Unidad[] }>({ locations: [], conditions: [], units: [] })
+  const [inventory, setInventory] = useState<Inventario[]>([])
+  const [inventoryLoading, setInventoryLoading] = useState(false)
   const [form, setForm] = useState<RequestHeaderDraft>(initialDraft?.form ?? { ubicacion_origen_id: '', ubicacion_destino_id: '', fecha_envio: localDateTime(), guia: '', transportista: '', observaciones_salida: '' })
   const [details, setDetails] = useState<RequestDetailDraft[]>(initialDraft?.details?.length ? initialDraft.details : [newDetail()])
   const [collapsedDetails, setCollapsedDetails] = useState<boolean[]>(initialDraft && initialDraft.collapsed?.length === initialDraft.details?.length ? initialDraft.collapsed : [false])
@@ -216,6 +238,31 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }, [])
 
   useEffect(() => {
+    if (!form.ubicacion_destino_id) {
+      setInventory([])
+      return
+    }
+    let cancelled = false
+    setInventory([])
+    setInventoryLoading(true)
+    inventoryApi.list({
+      estado: 'activos',
+      ubicacion_id: Number(form.ubicacion_destino_id),
+      page: 1,
+      page_size: 500,
+    }).then((result) => {
+      if (!cancelled) {
+        setInventory(result.items.filter((item) => item.categoria.nombre.trim().toUpperCase() === 'EQUIPO'))
+      }
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : 'No se cargó el inventario del destino.')
+    }).finally(() => {
+      if (!cancelled) setInventoryLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [form.ubicacion_destino_id])
+
+  useEffect(() => {
     if (createdRequest) return
     const timer = window.setTimeout(() => {
       try {
@@ -231,6 +278,59 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const updateDetail = (index: number, key: keyof RequestDetailDraft, value: string) => {
     setDetails((current) => current.map((item, position) => position === index ? { ...item, [key]: value } : item))
   }
+  const changeDestination = (destinationId: string) => {
+    setForm((current) => ({ ...current, ubicacion_destino_id: destinationId }))
+    setDetails((current) => current.map((detail) => detail.modo_inventario === 'EXISTENTE' ? {
+      ...detail,
+      inventario_id: '',
+      inventario_busqueda: '',
+      nombre_equipo: '',
+      costo_unitario: '',
+    } : detail))
+    setCollapsedDetails((current) => current.map(() => false))
+  }
+  const selectInventory = (index: number, value: string) => {
+    const selected = inventory.find((item) => inventoryOptionLabel(item) === value)
+    setDetails((current) => current.map((detail, position) => position !== index ? detail : selected ? {
+      ...detail,
+      modo_inventario: 'EXISTENTE',
+      inventario_id: String(selected.id),
+      inventario_busqueda: inventoryOptionLabel(selected),
+      nombre_equipo: selected.descripcion,
+      marca: selected.marca ?? '',
+      modelo: selected.modelo ?? '',
+      unidad_medida_id: String(selected.unidad_medida_id),
+      costo_unitario: selected.costo_unitario ?? '',
+      condicion_salida_id: selected.condicion_id && options.conditions.some((condition) => condition.id === selected.condicion_id)
+        ? String(selected.condicion_id)
+        : detail.condicion_salida_id,
+      calibracion_salida: selected.calibracion ?? detail.calibracion_salida,
+      fecha_calibracion_salida: selected.fecha_calibracion ?? detail.fecha_calibracion_salida,
+    } : {
+      ...detail,
+      inventario_id: '',
+      inventario_busqueda: value,
+      nombre_equipo: '',
+      costo_unitario: '',
+    }))
+  }
+  const changeInventoryMode = (index: number, mode: RequestDetailDraft['modo_inventario']) => {
+    setDetails((current) => current.map((detail, position) => position !== index ? detail : {
+      ...detail,
+      modo_inventario: mode,
+      inventario_id: '',
+      inventario_busqueda: '',
+      nombre_equipo: '',
+      costo_unitario: '',
+      marca: '',
+      modelo: '',
+      numero_serie: '',
+      codigo_patrimonial: '',
+      condicion_salida_id: '',
+      calibracion_salida: '',
+      fecha_calibracion_salida: '',
+    }))
+  }
   const addDetail = () => {
     setDetails((current) => [...current, newDetail(current[0]?.unidad_medida_id)])
     setCollapsedDetails((current) => [...current, false])
@@ -241,8 +341,10 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
   const editDetail = (index: number) => setCollapsedDetails((current) => current.map((value, position) => position === index ? false : value))
   const detailError = (detail: RequestDetailDraft) => {
+    if (detail.modo_inventario === 'EXISTENTE' && !detail.inventario_id) return 'Selecciona un artículo existente del inventario.'
     if (!detail.nombre_equipo.trim()) return 'Indica el nombre o descripción del equipo.'
-    if (!detail.cantidad || Number(detail.cantidad) < 1) return 'La cantidad debe ser mayor a cero.'
+    if (!detail.cantidad || Number(detail.cantidad) < 1 || !Number.isInteger(Number(detail.cantidad))) return 'La cantidad debe ser un número entero mayor a cero.'
+    if (detail.costo_unitario === '' || Number(detail.costo_unitario) < 0) return 'Indica el costo unitario del envío.'
     if (!detail.unidad_medida_id) return 'Selecciona la unidad de medida.'
     if (!detail.condicion_salida_id) return 'Selecciona la condición de salida.'
     const selectedCondition = options.conditions.find((condition) => String(condition.id) === detail.condicion_salida_id)
@@ -288,6 +390,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         solicitante_nombre: MINE_ACTOR,
         observaciones_salida: form.observaciones_salida.trim() || null,
         detalles: details.map((detail) => ({
+          inventario_id: detail.modo_inventario === 'EXISTENTE' ? Number(detail.inventario_id) : null,
           nombre_equipo: detail.nombre_equipo.trim(),
           marca: detail.marca.trim() || null,
           modelo: detail.modelo.trim() || null,
@@ -295,6 +398,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           codigo_patrimonial: detail.codigo_patrimonial.trim() || null,
           unidad_medida_id: Number(detail.unidad_medida_id),
           cantidad: Number(detail.cantidad),
+          costo_unitario_declarado: Number(detail.costo_unitario),
           condicion_salida_id: detail.condicion_salida_id ? Number(detail.condicion_salida_id) : null,
           calibracion_salida: detail.calibracion_salida || null,
           fecha_calibracion_salida: detail.fecha_calibracion_salida || null,
@@ -344,7 +448,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <div className="request-section-title"><div><h3>Datos del envío</h3><p>Define la ruta y los datos generales del despacho.</p></div></div>
           <div className="form-grid">
             <Field label="Origen" required><select value={form.ubicacion_origen_id} onChange={(e) => setForm({ ...form, ubicacion_origen_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
-            <Field label="Destino previsto" required><select value={form.ubicacion_destino_id} onChange={(e) => setForm({ ...form, ubicacion_destino_id: e.target.value })} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
+            <Field label="Destino previsto" required><select value={form.ubicacion_destino_id} onChange={(e) => changeDestination(e.target.value)} required><option value="">Seleccionar</option>{options.locations.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></Field>
             <Field label="Fecha y hora de envío" required><input type="datetime-local" value={form.fecha_envio} onChange={(e) => setForm({ ...form, fecha_envio: e.target.value })} required /></Field>
             <Field label="Guía o documento"><input value={form.guia} onChange={(e) => setForm({ ...form, guia: e.target.value })} /></Field>
             <Field label="Transportista"><input value={form.transportista} onChange={(e) => setForm({ ...form, transportista: e.target.value })} /></Field>
@@ -355,14 +459,45 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         <section className="request-form-section">
           <div className="request-section-title"><div><h3>Equipos del envío</h3><p>Agrega cada tipo de equipo; si tiene serie, identifícalo individualmente.</p></div><button type="button" className="btn btn-secondary" onClick={addDetail}>＋ Agregar equipo</button></div>
           <div className="request-items">
-            {details.map((detail, index) => collapsedDetails[index] ? <article className="saved-equipment-row" key={index}>
-              <span>{index + 1}</span><div><strong>{detail.nombre_equipo}</strong><small>{detail.numero_serie ? `Serie ${detail.numero_serie}` : detail.codigo_patrimonial ? `Patrimonial ${detail.codigo_patrimonial}` : `${formatNumber(detail.cantidad)} ${options.units.find((unit) => String(unit.id) === detail.unidad_medida_id)?.codigo ?? ''}`}</small></div><b>{conditionChoices.find((choice) => String(choice.condition?.id) === detail.condicion_salida_id)?.label ?? 'Sin condición'}</b><button type="button" className="btn btn-ghost btn-sm" onClick={() => editDetail(index)}>Editar</button><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeDetail(index)}>Quitar</button>
+            {details.map((detail, index) => {
+              const linkedInventory = inventory.find((item) => String(item.id) === detail.inventario_id)
+              const projectedStock = linkedInventory
+                ? Number(linkedInventory.stock_actual) + (Number(detail.cantidad) || 0)
+                : Number(detail.cantidad) || 0
+              return collapsedDetails[index] ? <article className="saved-equipment-row" key={index}>
+              <span>{index + 1}</span><div><strong>{detail.nombre_equipo}</strong><small>{formatNumber(detail.cantidad)} {options.units.find((unit) => String(unit.id) === detail.unidad_medida_id)?.codigo ?? ''} · S/ {Number(detail.costo_unitario || 0).toFixed(2)} c/u</small></div><b>{linkedInventory ? linkedInventory.codigo : 'Artículo nuevo'}</b><button type="button" className="btn btn-ghost btn-sm" onClick={() => editDetail(index)}>Editar</button><button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => removeDetail(index)}>Quitar</button>
             </article> : <section className="request-item-card expanded" key={index}>
               <header><div><span>{index + 1}</span><strong>Equipo {index + 1}</strong></div>{details.length > 1 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeDetail(index)}>Quitar</button>}</header>
               <div className="form-grid">
-                <Field label="Nombre o descripción" required className="span-2"><input value={detail.nombre_equipo} onChange={(e) => updateDetail(index, 'nombre_equipo', e.target.value)} placeholder="Ej. Detector multigás portátil" required /></Field>
-                <Field label="Cantidad" required><input type="number" min="1" step="1" value={detail.cantidad} onChange={(e) => updateDetail(index, 'cantidad', e.target.value)} required /></Field>
-                <Field label="Unidad" required><select value={detail.unidad_medida_id} onChange={(e) => updateDetail(index, 'unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.units.filter((item) => !item.permite_decimal).map((item) => <option key={item.id} value={item.id}>{item.nombre} ({item.codigo})</option>)}</select></Field>
+                <div className="inventory-link-panel span-3">
+                  <div className="inventory-link-modes">
+                    <button type="button" className={detail.modo_inventario === 'EXISTENTE' ? 'active' : ''} onClick={() => changeInventoryMode(index, 'EXISTENTE')}>Seleccionar del inventario</button>
+                    <button type="button" className={detail.modo_inventario === 'NUEVO' ? 'active' : ''} onClick={() => changeInventoryMode(index, 'NUEVO')}>Registrar artículo nuevo</button>
+                  </div>
+                  {detail.modo_inventario === 'EXISTENTE' ? <>
+                    <Field label="Buscar por código o descripción" required>
+                      <input
+                        list={`inventory-options-${index}`}
+                        value={detail.inventario_busqueda}
+                        onChange={(event) => selectInventory(index, event.target.value)}
+                        placeholder={!form.ubicacion_destino_id ? 'Selecciona primero el destino' : inventoryLoading ? 'Cargando inventario…' : 'Escribe para buscar'}
+                        disabled={!form.ubicacion_destino_id || inventoryLoading}
+                        required
+                      />
+                    </Field>
+                    <datalist id={`inventory-options-${index}`}>{inventory.map((item) => <option value={inventoryOptionLabel(item)} key={item.id}>{item.codigo}</option>)}</datalist>
+                    {linkedInventory && <div className="linked-inventory-summary">
+                      <div><small>Código</small><strong>{linkedInventory.codigo}</strong></div>
+                      <div><small>Stock actual</small><strong>{formatNumber(linkedInventory.stock_actual)} {linkedInventory.unidad_medida.codigo}</strong></div>
+                      <div><small>Costo actual</small><strong>{linkedInventory.costo_unitario === null ? 'Sin costo' : `S/ ${Number(linkedInventory.costo_unitario).toFixed(2)}`}</strong></div>
+                      <div><small>Ubicación</small><strong>{linkedInventory.ubicacion.codigo}</strong></div>
+                    </div>}
+                  </> : <Field label="Nombre o descripción del artículo nuevo" required><input value={detail.nombre_equipo} onChange={(e) => updateDetail(index, 'nombre_equipo', e.target.value)} placeholder="Ej. Detector multigás portátil" required /></Field>}
+                </div>
+                <Field label="Cantidad enviada" required><input type="number" min="1" step="1" value={detail.cantidad} onChange={(e) => updateDetail(index, 'cantidad', e.target.value)} required /></Field>
+                <Field label="Costo unitario del envío (S/)" required><input type="number" min="0" step="0.01" value={detail.costo_unitario} onChange={(e) => updateDetail(index, 'costo_unitario', e.target.value)} required /></Field>
+                <Field label="Unidad" required><select value={detail.unidad_medida_id} onChange={(e) => updateDetail(index, 'unidad_medida_id', e.target.value)} required disabled={detail.modo_inventario === 'EXISTENTE'}><option value="">Seleccionar</option>{options.units.filter((item) => !item.permite_decimal).map((item) => <option key={item.id} value={item.id}>{item.nombre} ({item.codigo})</option>)}</select></Field>
+                <div className="stock-projection span-3"><div><small>Stock actual</small><strong>{linkedInventory ? formatNumber(linkedInventory.stock_actual) : '0'}</strong></div><span>＋</span><div><small>Cantidad enviada</small><strong>{formatNumber(Number(detail.cantidad) || 0)}</strong></div><span>＝</span><div className="result"><small>Stock al recibir</small><strong>{formatNumber(projectedStock)}</strong></div><p>Esta proyección se aplicará únicamente cuando Logística confirme la recepción.</p></div>
                 <Field label="Marca"><input value={detail.marca} onChange={(e) => updateDetail(index, 'marca', e.target.value)} /></Field>
                 <Field label="Modelo"><input value={detail.modelo} onChange={(e) => updateDetail(index, 'modelo', e.target.value)} /></Field>
                 <Field label="Número de serie"><input value={detail.numero_serie} onChange={(e) => updateDetail(index, 'numero_serie', e.target.value)} /></Field>
@@ -374,7 +509,7 @@ function RequestForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
               </div>
               {Number(detail.cantidad) > 1 && (detail.numero_serie || detail.codigo_patrimonial) && <p className="field-hint">Si las unidades tienen series o códigos patrimoniales diferentes, agrégalas como líneas separadas.</p>}
               <div className="equipment-save-actions"><button type="button" className="btn btn-primary" onClick={() => saveDetail(index)}>Guardar equipo</button></div>
-            </section>)}
+            </section>})}
           </div>
         </section>
 
@@ -452,7 +587,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
               {item.detalles.map((detail, index) => <article className="request-equipment-card" key={detail.id}>
                 <button type="button" className="request-equipment-toggle" aria-expanded={expandedEquipment === detail.id} onClick={() => setExpandedEquipment((current) => current === detail.id ? null : detail.id)}>
                   <div><span>{index + 1}</span><strong>{detail.nombre_equipo}</strong></div>
-                  <b>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</b>
+                  <b>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo} · S/ {Number(detail.costo_unitario_declarado ?? 0).toFixed(2)} c/u</b>
                   <span>{detail.numero_serie ? `Serie ${detail.numero_serie}` : detail.codigo_patrimonial ? `Patrimonial ${detail.codigo_patrimonial}` : 'Sin identificación'}</span>
                   <span>{conditionDisplayName(detail.condicion_salida?.nombre) || 'Sin condición'} · {detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : 'Sin calibración'}</span>
                   <KeyboardArrowDownIcon className={expandedEquipment === detail.id ? 'expanded' : ''} />
@@ -466,6 +601,7 @@ function RequestDetail({ item, mine, onClose, onApprove, onReject, onReceive, on
                   <RequestData label="Calibración de salida" value={detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : null} />
                   <RequestData label="Fecha de calibración" value={detail.fecha_calibracion_salida ? formatDate(detail.fecha_calibracion_salida) : null} />
                   <RequestData label="Artículo de inventario" value={detail.inventario ? `${detail.inventario.codigo} · ${detail.inventario.descripcion}` : 'Preingreso sin vincular'} />
+                  <RequestData label="Costo unitario declarado" value={detail.costo_unitario_declarado === null ? null : `S/ ${Number(detail.costo_unitario_declarado).toFixed(2)}`} />
                   {item.estado === 'RECIBIDO' && <>
                     <RequestData label="Condición de recepción" value={conditionDisplayName(detail.condicion_recepcion?.nombre || detail.condicion_salida?.nombre)} />
                     <RequestData label="Calibración de recepción" value={detail.calibracion_recepcion ? calibrationLabels[detail.calibracion_recepcion] : detail.calibracion_salida ? calibrationLabels[detail.calibracion_salida] : null} />
@@ -742,8 +878,21 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
     <form className="receive-form" onSubmit={submit}>
       {item.detalles.map((detail) => {
         const entry = entries[detail.id]
+        const linkedInventory = entry.accion === 'VINCULAR'
+          ? inventory.find((candidate) => String(candidate.id) === entry.inventario_id)
+          : null
+        const currentStock = linkedInventory ? Number(linkedInventory.stock_actual) : 0
+        const receivedQuantity = Number(detail.cantidad)
+        const projectedStock = currentStock + receivedQuantity
+        const incomingCost = Number(detail.costo_unitario_declarado ?? 0)
+        const currentCost = linkedInventory?.costo_unitario === null || linkedInventory?.costo_unitario === undefined
+          ? incomingCost
+          : Number(linkedInventory.costo_unitario)
+        const projectedCost = projectedStock > 0
+          ? ((currentStock * currentCost) + (receivedQuantity * incomingCost)) / projectedStock
+          : incomingCost
         return <section className="receive-equipment" key={detail.id}>
-          <header><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo, detail.numero_serie].filter(Boolean).join(' · ') || 'Sin identificación adicional'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo}</span></header>
+          <header><div><strong>{detail.nombre_equipo}</strong><small>{[detail.marca, detail.modelo, detail.numero_serie].filter(Boolean).join(' · ') || 'Sin identificación adicional'}</small></div><span>{formatNumber(detail.cantidad)} {detail.unidad_medida.codigo} · S/ {incomingCost.toFixed(2)} c/u</span></header>
           <div className="receive-equipment-fields">
             <Field label="Acción de inventario" required><select value={entry.accion} onChange={(e) => update(detail.id, { accion: e.target.value as ReceptionDraft['accion'], inventario_id: '' })}><option value="CREAR">Crear artículo nuevo</option><option value="VINCULAR">Vincular artículo existente</option></select></Field>
             {entry.accion === 'CREAR'
@@ -762,6 +911,12 @@ function ReceiveForm({ item, onClose, onSaved }: { item: SolicitudEquipo; onClos
               })
             }}><option value="">Conservar dato de salida</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></Field>
             <Field label="Fecha de calibración" required={entry.calibracion === 'CALIBRADO'}><input type="date" value={entry.fecha_calibracion} onChange={(e) => update(detail.id, { fecha_calibracion: e.target.value })} disabled={entry.calibracion !== 'CALIBRADO'} required={entry.calibracion === 'CALIBRADO'} /></Field>
+          </div>
+          <div className="reception-stock-preview">
+            <div><small>Stock actual</small><strong>{linkedInventory ? formatNumber(currentStock) : entry.accion === 'CREAR' ? '0' : 'Selecciona un artículo'}</strong></div>
+            <span>＋ {formatNumber(receivedQuantity)}</span>
+            <div><small>Stock posterior</small><strong>{linkedInventory || entry.accion === 'CREAR' ? formatNumber(projectedStock) : '—'}</strong></div>
+            <div><small>Costo promedio posterior</small><strong>{linkedInventory || entry.accion === 'CREAR' ? `S/ ${projectedCost.toFixed(2)}` : '—'}</strong></div>
           </div>
         </section>
       })}

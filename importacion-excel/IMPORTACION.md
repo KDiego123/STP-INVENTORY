@@ -47,6 +47,7 @@ Las ampliaciones de la aplicación se aplican después de `001`, en orden:
 005_preingreso_equipos.sql
 006_archivos_solicitudes.sql
 007_rechazo_solicitudes.sql
+008_vinculacion_costo_solicitudes.sql
 ```
 
 ## 4. Importar

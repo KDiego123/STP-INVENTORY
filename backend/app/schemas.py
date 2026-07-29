@@ -114,6 +114,9 @@ class MovimientoOut(ORMModel):
     cantidad: Decimal
     stock_anterior: Decimal | None
     stock_posterior: Decimal | None
+    costo_unitario_anterior: Decimal | None
+    costo_unitario_ingreso: Decimal | None
+    costo_unitario_posterior: Decimal | None
     responsable: str | None
     motivo: str | None
     documento: str | None
@@ -192,6 +195,7 @@ EstadoCalibracion = Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"]
 
 
 class SolicitudEquipoDetalleCreate(BaseModel):
+    inventario_id: int | None = None
     nombre_equipo: str = Field(min_length=2, max_length=250)
     marca: str | None = Field(default=None, max_length=100)
     modelo: str | None = Field(default=None, max_length=100)
@@ -199,6 +203,7 @@ class SolicitudEquipoDetalleCreate(BaseModel):
     codigo_patrimonial: str | None = Field(default=None, max_length=120)
     unidad_medida_id: int
     cantidad: int = Field(ge=1)
+    costo_unitario_declarado: Decimal = Field(ge=0, decimal_places=2)
     condicion_salida_id: int | None = None
     calibracion_salida: EstadoCalibracion
     fecha_calibracion_salida: date | None = None
@@ -291,6 +296,7 @@ class SolicitudEquipoDetalleOut(ORMModel):
     numero_serie: str | None
     codigo_patrimonial: str | None
     cantidad: int
+    costo_unitario_declarado: Decimal
     calibracion_salida: str | None
     fecha_calibracion_salida: date | None
     calibracion_recepcion: str | None

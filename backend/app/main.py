@@ -1,6 +1,6 @@
 from hashlib import sha256
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from math import ceil
 from pathlib import Path
 from typing import Annotated, Literal
@@ -460,6 +460,8 @@ def movimiento_anular(pk: int, db: DB):
             if nuevo < Decimal("0"):
                 raise HTTPException(status_code=409, detail="La anulación produciría stock negativo.")
             inventario.stock_actual = nuevo
+            if movimiento.costo_unitario_ingreso is not None:
+                inventario.costo_unitario = movimiento.costo_unitario_anterior
         elif tipo.signo_stock == -1:
             inventario.stock_actual += movimiento.cantidad
         elif tipo.codigo == "TRASLADO":
@@ -733,15 +735,51 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
             _validar_catalogo_activo(
                 db, Condicion, detalle.condicion_salida_id, "Condición de salida"
             )
+        inventario_vinculado = None
+        if detalle.inventario_id is not None:
+            inventario_vinculado = db.scalar(
+                select(Inventario).where(Inventario.id == detalle.inventario_id)
+            )
+            if inventario_vinculado is None or not inventario_vinculado.activo:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"El artículo propuesto para {detalle.nombre_equipo} no existe o está inactivo.",
+                )
+            if inventario_vinculado.categoria.nombre.strip().upper() != "EQUIPO":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{inventario_vinculado.codigo} no pertenece a la categoría EQUIPO.",
+                )
+            if inventario_vinculado.ubicacion_id != datos.ubicacion_destino_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"{inventario_vinculado.codigo} pertenece a "
+                        f"{inventario_vinculado.ubicacion.codigo}, no al destino seleccionado."
+                    ),
+                )
+            if inventario_vinculado.unidad_medida_id != detalle.unidad_medida_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"{inventario_vinculado.codigo} usa la unidad "
+                        f"{inventario_vinculado.unidad_medida.codigo}."
+                    ),
+                )
         registro.detalles.append(SolicitudEquipoDetalle(
-            inventario_id=None,
-            nombre_equipo=detalle.nombre_equipo,
+            inventario_id=detalle.inventario_id,
+            nombre_equipo=(
+                inventario_vinculado.descripcion
+                if inventario_vinculado is not None
+                else detalle.nombre_equipo
+            ),
             marca=detalle.marca,
             modelo=detalle.modelo,
             numero_serie=detalle.numero_serie,
             codigo_patrimonial=detalle.codigo_patrimonial,
             unidad_medida_id=detalle.unidad_medida_id,
             cantidad=detalle.cantidad,
+            costo_unitario_declarado=detalle.costo_unitario_declarado,
             condicion_salida_id=detalle.condicion_salida_id,
             calibracion_salida=detalle.calibracion_salida,
             fecha_calibracion_salida=detalle.fecha_calibracion_salida,
@@ -981,9 +1019,25 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                 db.flush()
 
             cantidad = Decimal(detalle.cantidad)
+            costo_ingreso = detalle.costo_unitario_declarado
+            if costo_ingreso is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"El detalle {detalle.nombre_equipo} no tiene costo unitario declarado.",
+                )
             stock_anterior = inventario.stock_actual
             stock_posterior = stock_anterior + cantidad
+            costo_anterior = inventario.costo_unitario
+            costo_base = costo_anterior if costo_anterior is not None else costo_ingreso
+            costo_posterior = (
+                (
+                    (stock_anterior * costo_base)
+                    + (cantidad * costo_ingreso)
+                )
+                / stock_posterior
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             inventario.stock_actual = stock_posterior
+            inventario.costo_unitario = costo_posterior
             inventario.fecha_ultima_entrada = ahora.date()
             inventario.condicion_id = (
                 recibido.condicion_recepcion_id or inventario.condicion_id
@@ -1009,6 +1063,9 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                     cantidad=cantidad,
                     stock_anterior=stock_anterior,
                     stock_posterior=stock_posterior,
+                    costo_unitario_anterior=costo_anterior,
+                    costo_unitario_ingreso=costo_ingreso,
+                    costo_unitario_posterior=costo_posterior,
                     ubicacion_origen_id=None,
                     ubicacion_destino_id=destino.id,
                     responsable=datos.usuario_nombre.strip(),
