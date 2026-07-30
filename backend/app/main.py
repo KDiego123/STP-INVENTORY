@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -55,6 +56,7 @@ from .schemas import (
     UnidadOut,
 )
 from .nextcloud import NextcloudError, storage
+from .inventory_excel import generar_inventario_excel
 
 
 app = FastAPI(
@@ -216,6 +218,28 @@ def inventario_listar(
         page=page,
         page_size=page_size,
         pages=max(1, ceil(total / page_size)),
+    )
+
+
+@app.get("/api/inventario/exportar/excel")
+def inventario_exportar_excel(db: DB):
+    items = db.scalars(
+        select(Inventario)
+        .where(Inventario.activo)
+        .order_by(Inventario.id.asc())
+    ).unique().all()
+    try:
+        output = generar_inventario_excel(items)
+    except (FileNotFoundError, OSError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo preparar la plantilla de exportación.",
+        ) from exc
+    filename = f"inventario_lima_{datetime.now().date().isoformat()}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

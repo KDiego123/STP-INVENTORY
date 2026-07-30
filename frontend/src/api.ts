@@ -56,6 +56,20 @@ export const inventoryApi = {
   create: (body: unknown) => api<Inventario>('/inventario', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: unknown) => api<Inventario>(`/inventario/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   toggle: (id: number) => api<Inventario>(`/inventario/${id}/estado`, { method: 'PATCH' }),
+  exportExcel: async () => {
+    const response = await fetch('/api/inventario/exportar/excel')
+    if (!response.ok) {
+      let message = 'No se pudo exportar el inventario.'
+      try {
+        const data = await response.json()
+        if (typeof data.detail === 'string') message = data.detail
+      } catch {
+        // Mantiene el mensaje general.
+      }
+      throw new ApiError(message, response.status)
+    }
+    return response.blob()
+  },
 }
 
 export const movementsApi = {
