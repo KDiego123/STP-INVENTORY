@@ -64,7 +64,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-      <div className="brand"><span className="brand-mark">IL</span><div><strong>Inventario Lima</strong><small>Gestión de almacén</small></div></div>
+      <div className="brand"><span className="brand-mark"><img src="/favicon.ico" alt="" /></span><div><strong>Inventario Lima</strong><small>Gestión de almacén</small></div></div>
       <nav>
         {visibleNavItems.map((item, index) => <div key={item.key}>
           {item.group && <p className="nav-group">{item.group}</p>}
