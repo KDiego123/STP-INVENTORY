@@ -21,7 +21,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .app-shell { min-height: 100vh; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 250px; display: flex; flex-direction: column; color: #eef7fb; background: linear-gradient(180deg, #123b58, #0f3049); box-shadow: 4px 0 24px rgba(8, 35, 52, .12); }
 .brand { display: flex; gap: 12px; align-items: center; padding: 24px 20px 20px; }
-.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: white; background: linear-gradient(145deg, #27a89a, #16847a); font-weight: 800; letter-spacing: -.04em; box-shadow: 0 8px 20px rgba(13, 30, 42, .2); }
+.brand-mark { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; overflow: hidden; border-radius: 13px; background: white; box-shadow: 0 8px 20px rgba(13, 30, 42, .2); }
+.brand-mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .brand div { display: grid; gap: 2px; }
 .brand strong { font-size: 15px; }
 .brand small { color: #a8c3d3; font-size: 11px; }

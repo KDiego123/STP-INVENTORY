@@ -6,12 +6,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
 import openpyxl
+from openpyxl.drawing.image import Image
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
 
 if TYPE_CHECKING:
     from .models import Inventario
 
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "importacion-excel" / "Inventario LIMA.xlsx"
+LOGO_PATH = Path(__file__).resolve().parents[2] / "importacion-excel" / "STP.png"
 FIRST_DATA_ROW = 7
 
 
@@ -28,14 +33,37 @@ def generar_inventario_excel(
     items: Iterable["Inventario"],
     fecha_inventario: date | None = None,
     template_path: Path = TEMPLATE_PATH,
+    logo_path: Path = LOGO_PATH,
 ) -> BytesIO:
     if not template_path.exists():
         raise FileNotFoundError(f"No se encontró la plantilla de inventario: {template_path}")
+    if not logo_path.exists():
+        raise FileNotFoundError(f"No se encontró el logo institucional: {logo_path}")
 
     workbook = openpyxl.load_workbook(template_path)
     worksheet = workbook["INVENTARIO"]
     if "MOVIMIENTOS" in workbook.sheetnames:
         del workbook["MOVIMIENTOS"]
+
+    worksheet._images = []
+    logo = Image(logo_path)
+    logo_width = 270
+    logo_height = round(logo_width * logo.height / logo.width)
+    logo.width = logo_width
+    logo.height = logo_height
+    logo.anchor = OneCellAnchor(
+        _from=AnchorMarker(
+            col=0,
+            colOff=pixels_to_EMU(26),
+            row=0,
+            rowOff=pixels_to_EMU(22),
+        ),
+        ext=XDRPositiveSize2D(
+            cx=pixels_to_EMU(logo_width),
+            cy=pixels_to_EMU(logo_height),
+        ),
+    )
+    worksheet.add_image(logo)
 
     styles = [copy(worksheet.cell(FIRST_DATA_ROW, column)._style) for column in range(1, 12)]
     alignments = [copy(worksheet.cell(FIRST_DATA_ROW, column).alignment) for column in range(1, 12)]
