@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
@@ -50,6 +51,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [changingStatus, setChangingStatus] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -90,9 +92,28 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo cambiar el estado.', 'error') }
     finally { setChangingStatus(false) }
   }
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      const file = await inventoryApi.exportExcel()
+      const url = URL.createObjectURL(file)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inventario_lima_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      notify('Inventario exportado correctamente.')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'No se pudo exportar el inventario.', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Almacén Lima</p><h1>Inventario</h1><p>{readOnly ? 'Consulta los artículos registrados en modo de solo lectura.' : 'Consulta y administra los artículos registrados.'}</p></div>{!readOnly && <button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button>}</div>
+    <div className="page-heading"><div><p className="eyebrow">Almacén Lima</p><h1>Inventario</h1><p>{readOnly ? 'Consulta los artículos registrados en modo de solo lectura.' : 'Consulta y administra los artículos registrados.'}</p></div><div className="page-heading-actions"><button type="button" className="btn btn-secondary" onClick={() => void exportExcel()} disabled={exporting}><FileDownloadOutlinedIcon /> {exporting ? 'Preparando…' : 'Exportar Excel'}</button>{!readOnly && <button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button>}</div></div>
     <form className="inventory-search-panel card" onSubmit={search}>
       <div className="inventory-search-row">
         <label className="inventory-search-input"><SearchIcon /><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Buscar por código, descripción, marca, modelo o serie" /></label>

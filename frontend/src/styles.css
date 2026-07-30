@@ -66,6 +66,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 24px; }
+.page-heading-actions { display: flex; align-items: center; gap: 9px; }
+.page-heading-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.page-heading-actions .btn svg { font-size: 18px; }
 .page-heading h1 { margin: 2px 0 5px; font-size: clamp(26px, 3vw, 36px); letter-spacing: -.035em; color: #14364e; }
 .page-heading p { margin: 0; color: var(--muted); }
 .eyebrow { color: var(--teal) !important; font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
@@ -544,7 +547,7 @@ tbody tr:hover { background: #fafcfd; }
   .sidebar-overlay { position: fixed; inset: 0; z-index: 35; border: 0; background: rgba(8,28,40,.48); }
   .content-shell { margin-left: 0; }.menu-button { display: block; }.topbar { padding: 0 16px; }.topbar span { display: none; }
   .topbar-actions { gap: 8px; }.topbar time { display: none; }
-  main { padding: 20px 15px; }.page-heading { align-items: flex-start; flex-direction: column; }.page-heading .btn { width: 100%; }
+  main { padding: 20px 15px; }.page-heading { align-items: flex-start; flex-direction: column; }.page-heading .btn, .page-heading-actions { width: 100%; }.page-heading-actions { align-items: stretch; }
   .catalog-grid { grid-template-columns: 1fr; }
   .filter-bar-inventory, .filter-bar-movements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-bar .search-field, .filter-actions { grid-column: 1 / -1; }
@@ -578,6 +581,7 @@ tbody tr:hover { background: #fafcfd; }
   .filter-bar-inventory, .filter-bar-movements { grid-template-columns: 1fr; }
   .filter-bar .search-field, .filter-actions { grid-column: 1; }
   .filter-actions .btn { flex: 1; }
+  .page-heading-actions { flex-direction: column-reverse; }
   .settings-content { padding: 15px; }
   .settings-navigation button { flex-basis: 145px; padding: 9px; }
   .settings-navigation-icon { display: none; }
