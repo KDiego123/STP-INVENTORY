@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
 import PreviewOutlinedIcon from '@mui/icons-material/PreviewOutlined'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
@@ -33,6 +35,7 @@ function readPage(): PageKey {
 export default function App() {
   const [page, setPage] = useState<PageKey>(readPage)
   const [viewRole, setViewRole] = useState<ViewRole>(() => sessionStorage.getItem('inventory-view-role') === 'almacenero' ? 'almacenero' : 'logistica')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('inventory-theme') === 'dark' ? 'dark' : 'light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
@@ -41,6 +44,10 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('inventory-theme', theme)
+  }, [theme])
 
   const navigate = (key: PageKey) => {
     window.location.hash = `/${key}`
@@ -74,6 +81,16 @@ export default function App() {
           {item.key === 'movimientos' && <div className="nav-separator" />}
         </div>)}
       </nav>
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+        aria-label={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+        title={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+      >
+        {theme === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
+        <span>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+      </button>
       <div className="sidebar-footer"><span className="status-dot" /><div><strong>Acceso local</strong><small>Autenticación desactivada</small></div></div>
     </aside>
     {sidebarOpen && <button className="sidebar-overlay" aria-label="Cerrar menú" onClick={() => setSidebarOpen(false)} />}
