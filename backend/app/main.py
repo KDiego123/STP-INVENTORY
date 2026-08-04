@@ -262,7 +262,6 @@ def inventario_listar(
 def inventario_exportar_excel(db: DB):
     items = db.scalars(
         select(Inventario)
-        .where(Inventario.activo)
         .order_by(Inventario.id.asc())
     ).unique().all()
     try:
@@ -272,7 +271,7 @@ def inventario_exportar_excel(db: DB):
             status_code=500,
             detail="No se pudo preparar la plantilla de exportación.",
         ) from exc
-    filename = f"inventario_lima_{datetime.now().date().isoformat()}.xlsx"
+    filename = f"inventario_stp_{datetime.now().date().isoformat()}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

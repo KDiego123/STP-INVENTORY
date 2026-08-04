@@ -104,7 +104,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
       const url = URL.createObjectURL(file)
       const link = document.createElement('a')
       link.href = url
-      link.download = `inventario_lima_${new Date().toISOString().slice(0, 10)}.xlsx`
+      link.download = `inventario_stp_${new Date().toISOString().slice(0, 10)}.xlsx`
       document.body.appendChild(link)
       link.click()
       link.remove()
