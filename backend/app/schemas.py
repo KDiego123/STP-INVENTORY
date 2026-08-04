@@ -16,6 +16,21 @@ class CatalogoBase(ORMModel):
     activo: bool
 
 
+class GrupoOut(CatalogoBase):
+    prefijo: str
+
+
+class ClasificacionOut(ORMModel):
+    id: int
+    grupo_id: int
+    familia_id: int
+    subfamilia_id: int
+    activo: bool
+    grupo: GrupoOut
+    familia: CatalogoBase
+    subfamilia: CatalogoBase
+
+
 class UnidadOut(CatalogoBase):
     codigo: str
     permite_decimal: bool
@@ -24,6 +39,7 @@ class UnidadOut(CatalogoBase):
 class AlmacenOut(ORMModel):
     id: int
     nombre: str
+    descripcion: str | None = None
     activo: bool
 
 
@@ -49,13 +65,12 @@ class InventarioOut(ORMModel):
     id: int
     codigo: str
     descripcion: str
-    categoria_id: int
+    clasificacion_id: int
     unidad_medida_id: int
-    ubicacion_id: int
+    ubicacion_id: int | None
     condicion_id: int | None
     stock_actual: Decimal
     stock_minimo: Decimal | None
-    costo_unitario: Decimal | None
     fecha_ultima_entrada: date | None
     fecha_ultima_salida: date | None
     calibracion: str | None
@@ -66,22 +81,21 @@ class InventarioOut(ORMModel):
     codigo_patrimonial: str | None
     observaciones: str | None
     activo: bool
-    categoria: CatalogoBase
+    clasificacion: ClasificacionOut
     unidad_medida: UnidadOut
-    ubicacion: UbicacionOut
+    ubicacion: UbicacionOut | None
     condicion: CatalogoBase | None
 
 
 class InventarioCreate(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     descripcion: str = Field(min_length=1)
-    categoria_id: int
+    clasificacion_id: int
     unidad_medida_id: int
-    ubicacion_id: int
+    ubicacion_id: int | None = None
     condicion_id: int | None = None
     stock_actual: Decimal = Field(default=0, ge=0, decimal_places=3)
     stock_minimo: Decimal | None = Field(default=None, ge=0, decimal_places=3)
-    costo_unitario: Decimal | None = Field(default=None, ge=0, decimal_places=2)
     fecha_ultima_entrada: date | None = None
     fecha_ultima_salida: date | None = None
     calibracion: Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] | None = None
@@ -114,9 +128,6 @@ class MovimientoOut(ORMModel):
     cantidad: Decimal
     stock_anterior: Decimal | None
     stock_posterior: Decimal | None
-    costo_unitario_anterior: Decimal | None
-    costo_unitario_ingreso: Decimal | None
-    costo_unitario_posterior: Decimal | None
     responsable: str | None
     motivo: str | None
     documento: str | None
@@ -152,6 +163,22 @@ class CatalogoCreate(BaseModel):
         return " ".join(value.split()).upper()
 
 
+class GrupoCreate(CatalogoCreate):
+    prefijo: str = Field(min_length=1, max_length=12, pattern=r"^[A-Za-z0-9]+$")
+
+    @field_validator("prefijo")
+    @classmethod
+    def normalizar_prefijo(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class ClasificacionCreate(BaseModel):
+    grupo_id: int
+    familia_id: int
+    subfamilia_id: int
+    activo: bool = True
+
+
 class UnidadCreate(CatalogoCreate):
     codigo: str = Field(min_length=1, max_length=20)
     permite_decimal: bool = False
@@ -172,6 +199,10 @@ class UbicacionCreate(BaseModel):
     @classmethod
     def normalizar_codigo(cls, value: str) -> str:
         return value.strip().upper()
+
+
+class AlmacenCreate(CatalogoCreate):
+    pass
 
 
 class PaginatedInventario(BaseModel):
@@ -196,6 +227,7 @@ EstadoCalibracion = Literal["NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"]
 
 class SolicitudEquipoDetalleCreate(BaseModel):
     inventario_id: int | None = None
+    clasificacion_id: int
     nombre_equipo: str = Field(min_length=2, max_length=250)
     marca: str | None = Field(default=None, max_length=100)
     modelo: str | None = Field(default=None, max_length=100)
@@ -203,7 +235,6 @@ class SolicitudEquipoDetalleCreate(BaseModel):
     codigo_patrimonial: str | None = Field(default=None, max_length=120)
     unidad_medida_id: int
     cantidad: int = Field(ge=1)
-    costo_unitario_declarado: Decimal = Field(ge=0, decimal_places=2)
     condicion_salida_id: int | None = None
     calibracion_salida: EstadoCalibracion
     fecha_calibracion_salida: date | None = None
@@ -298,13 +329,13 @@ class SolicitudEquipoDetalleOut(ORMModel):
     cantidad: int
     # Las solicitudes creadas antes de la migración 008 pueden conservar NULL
     # hasta que el administrador ejecute la normalización de datos.
-    costo_unitario_declarado: Decimal | None
     calibracion_salida: str | None
     fecha_calibracion_salida: date | None
     calibracion_recepcion: str | None
     fecha_calibracion_recepcion: date | None
     observaciones: str | None
     inventario: InventarioOut | None
+    clasificacion: ClasificacionOut
     unidad_medida: UnidadOut
     condicion_salida: CatalogoBase | None
     condicion_recepcion: CatalogoBase | None
@@ -367,7 +398,7 @@ class PaginatedSolicitudes(BaseModel):
 
 class DashboardOut(BaseModel):
     articulos_activos: int
-    categorias_activas: int
+    grupos_activos: int
     ubicaciones_activas: int
     stock_bajo: int
     movimientos_recientes: list[MovimientoOut]

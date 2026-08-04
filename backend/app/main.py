@@ -1,6 +1,6 @@
 from hashlib import sha256
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from math import ceil
 from pathlib import Path
 from typing import Annotated, Literal
@@ -19,22 +19,31 @@ from .config import settings
 from .database import get_db
 from .models import (
     Almacen,
-    Categoria,
+    Clasificacion,
     Condicion,
+    Familia,
+    Grupo,
     Inventario,
     Movimiento,
     SolicitudEquipo,
     SolicitudEquipoArchivo,
     SolicitudEquipoDetalle,
     SolicitudEquipoHistorial,
+    Subfamilia,
     TipoMovimiento,
     Ubicacion,
     UnidadMedida,
 )
 from .schemas import (
+    AlmacenCreate,
+    AlmacenOut,
     CatalogoBase,
     CatalogoCreate,
+    ClasificacionCreate,
+    ClasificacionOut,
     DashboardOut,
+    GrupoCreate,
+    GrupoOut,
     InventarioCreate,
     InventarioOut,
     InventarioUpdate,
@@ -73,6 +82,7 @@ app.add_middleware(
 )
 
 DB = Annotated[Session, Depends(get_db)]
+EQUIPMENT_GROUPS = {"EQUIPO", "EQUIPO DE COMPUTO", "ACTIVO", "MAQ EQP PESADO"}
 
 
 def _error_integridad(exc: IntegrityError):
@@ -95,20 +105,34 @@ def _obtener(db: Session, modelo, pk: int, nombre: str):
 
 
 def _validar_catalogos_inventario(db: Session, datos: InventarioCreate):
-    categoria = _obtener(db, Categoria, datos.categoria_id, "Categoría")
+    clasificacion = _obtener(db, Clasificacion, datos.clasificacion_id, "Clasificación")
     unidad = _obtener(db, UnidadMedida, datos.unidad_medida_id, "Unidad")
-    ubicacion = _obtener(db, Ubicacion, datos.ubicacion_id, "Ubicación")
-    if not categoria.activo or not unidad.activo or not ubicacion.activo:
+    ubicacion = (
+        _obtener(db, Ubicacion, datos.ubicacion_id, "Ubicación")
+        if datos.ubicacion_id is not None
+        else None
+    )
+    catalogos_clasificacion = (
+        clasificacion.grupo,
+        clasificacion.familia,
+        clasificacion.subfamilia,
+    )
+    if (
+        not clasificacion.activo
+        or any(not catalogo.activo for catalogo in catalogos_clasificacion)
+        or not unidad.activo
+        or (ubicacion is not None and not ubicacion.activo)
+    ):
         raise HTTPException(status_code=400, detail="Seleccione catálogos activos.")
-    es_equipo = categoria.nombre.strip().upper() == "EQUIPO"
+    es_equipo = clasificacion.grupo.nombre.strip().upper() in EQUIPMENT_GROUPS
     if es_equipo and datos.calibracion is None:
         raise HTTPException(status_code=400, detail="Seleccione el estado de calibración del equipo.")
     if es_equipo and datos.calibracion == "CALIBRADO" and datos.fecha_calibracion is None:
         raise HTTPException(status_code=400, detail="Indique la fecha de calibración del equipo.")
-    if not es_equipo and datos.calibracion is not None:
-        raise HTTPException(status_code=400, detail="La calibración solo corresponde a la categoría EQUIPO.")
+    if not es_equipo and datos.calibracion not in (None, "NO_CUMPLE"):
+        raise HTTPException(status_code=400, detail="La calibración no corresponde a este grupo.")
     if not es_equipo and datos.fecha_calibracion is not None:
-        raise HTTPException(status_code=400, detail="La fecha de calibración solo corresponde a la categoría EQUIPO.")
+        raise HTTPException(status_code=400, detail="La fecha de calibración no corresponde a este grupo.")
     if datos.condicion_id is not None:
         condicion = _obtener(db, Condicion, datos.condicion_id, "Condición")
         if not condicion.activo:
@@ -134,7 +158,7 @@ def health(db: DB):
 @app.get("/api/dashboard", response_model=DashboardOut)
 def dashboard(db: DB):
     articulos = db.scalar(select(func.count()).select_from(Inventario).where(Inventario.activo))
-    categorias = db.scalar(select(func.count()).select_from(Categoria).where(Categoria.activo))
+    grupos = db.scalar(select(func.count()).select_from(Grupo).where(Grupo.activo))
     ubicaciones = db.scalar(select(func.count()).select_from(Ubicacion).where(Ubicacion.activo))
     filtro_bajo = (
         Inventario.activo,
@@ -150,7 +174,7 @@ def dashboard(db: DB):
     ).unique().all()
     return DashboardOut(
         articulos_activos=articulos or 0,
-        categorias_activas=categorias or 0,
+        grupos_activos=grupos or 0,
         ubicaciones_activas=ubicaciones or 0,
         stock_bajo=stock_bajo or 0,
         movimientos_recientes=recientes,
@@ -162,7 +186,9 @@ def dashboard(db: DB):
 def inventario_listar(
     db: DB,
     q: str = "",
-    categoria_id: int | None = None,
+    grupo_id: int | None = None,
+    familia_id: int | None = None,
+    subfamilia_id: int | None = None,
     ubicacion_id: int | None = None,
     estado: Literal["activos", "inactivos", "todos", "bajo"] = "activos",
     calibracion: Literal["", "NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] = "",
@@ -184,8 +210,12 @@ def inventario_listar(
                 Inventario.observaciones.ilike(patron),
             )
         )
-    if categoria_id:
-        filtros.append(Inventario.categoria_id == categoria_id)
+    if grupo_id:
+        filtros.append(Inventario.clasificacion.has(Clasificacion.grupo_id == grupo_id))
+    if familia_id:
+        filtros.append(Inventario.clasificacion.has(Clasificacion.familia_id == familia_id))
+    if subfamilia_id:
+        filtros.append(Inventario.clasificacion.has(Clasificacion.subfamilia_id == subfamilia_id))
     if ubicacion_id:
         filtros.append(Inventario.ubicacion_id == ubicacion_id)
     if estado == "activos":
@@ -243,21 +273,22 @@ def inventario_exportar_excel(db: DB):
     )
 
 
-def _siguiente_codigo_inventario(db: Session) -> str:
+def _siguiente_codigo_inventario(db: Session, grupo_id: int) -> str:
+    grupo = _validar_catalogo_activo(db, Grupo, grupo_id, "Grupo")
     codigos = db.scalars(
-        select(Inventario.codigo).where(Inventario.codigo.like("LIMA-%"))
+        select(Inventario.codigo).where(Inventario.codigo.like(f"{grupo.prefijo}%"))
     ).all()
     numeros = []
     for codigo in codigos:
-        sufijo = codigo.removeprefix("LIMA-")
+        sufijo = codigo.removeprefix(grupo.prefijo)
         if sufijo.isdigit():
             numeros.append(int(sufijo))
-    return f"LIMA-{max(numeros, default=0) + 1:04d}"
+    return f"{grupo.prefijo}{max(numeros, default=0) + 1:06d}"
 
 
 @app.get("/api/inventario/siguiente-codigo")
-def inventario_siguiente_codigo(db: DB):
-    return {"codigo": _siguiente_codigo_inventario(db)}
+def inventario_siguiente_codigo(db: DB, grupo_id: int):
+    return {"codigo": _siguiente_codigo_inventario(db, grupo_id)}
 
 
 @app.get("/api/inventario/{pk}", response_model=InventarioOut)
@@ -384,7 +415,11 @@ def movimiento_crear(datos: MovimientoCreate, db: DB):
         if origen is not None and origen != inventario.ubicacion_id:
             raise HTTPException(
                 status_code=409,
-                detail=f"La ubicación actual del artículo es {inventario.ubicacion.codigo}.",
+                detail=(
+                    f"La ubicación actual del artículo es {inventario.ubicacion.codigo}."
+                    if inventario.ubicacion is not None
+                    else "El artículo todavía no tiene una ubicación asignada."
+                ),
             )
         if destino is not None:
             _obtener(db, Ubicacion, destino, "Ubicación de destino")
@@ -392,11 +427,14 @@ def movimiento_crear(datos: MovimientoCreate, db: DB):
         stock_anterior = inventario.stock_actual
         stock_posterior = stock_anterior
         if tipo.signo_stock == 1:
-            if tipo.codigo == "ENTRADA" and destino not in (None, inventario.ubicacion_id):
-                raise HTTPException(
-                    status_code=409,
-                    detail="La entrada debe usar la ubicación actual. Use un traslado para cambiarla.",
-                )
+            if tipo.codigo == "ENTRADA":
+                if inventario.ubicacion_id is None and destino is not None:
+                    inventario.ubicacion_id = destino
+                elif destino not in (None, inventario.ubicacion_id):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="La entrada debe usar la ubicación actual. Use un traslado para cambiarla.",
+                    )
             stock_posterior += datos.cantidad
             if tipo.codigo == "ENTRADA":
                 inventario.fecha_ultima_entrada = datos.fecha.date()
@@ -484,8 +522,6 @@ def movimiento_anular(pk: int, db: DB):
             if nuevo < Decimal("0"):
                 raise HTTPException(status_code=409, detail="La anulación produciría stock negativo.")
             inventario.stock_actual = nuevo
-            if movimiento.costo_unitario_ingreso is not None:
-                inventario.costo_unitario = movimiento.costo_unitario_anterior
         elif tipo.signo_stock == -1:
             inventario.stock_actual += movimiento.cantidad
         elif tipo.codigo == "TRASLADO":
@@ -737,6 +773,14 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
         actualizado_en=datetime.now(timezone.utc),
     )
     for detalle in datos.detalles:
+        clasificacion = _validar_catalogo_activo(
+            db, Clasificacion, detalle.clasificacion_id, "Clasificación"
+        )
+        if clasificacion.grupo.nombre.strip().upper() not in EQUIPMENT_GROUPS:
+            raise HTTPException(
+                status_code=400,
+                detail="Las solicitudes de equipos requieren una clasificación del grupo EQUIPO.",
+            )
         unidad = _validar_catalogo_activo(
             db, UnidadMedida, detalle.unidad_medida_id, "Unidad de medida"
         )
@@ -769,10 +813,15 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
                     status_code=404,
                     detail=f"El artículo propuesto para {detalle.nombre_equipo} no existe o está inactivo.",
                 )
-            if inventario_vinculado.categoria.nombre.strip().upper() != "EQUIPO":
+            if inventario_vinculado.clasificacion.grupo.nombre.strip().upper() not in EQUIPMENT_GROUPS:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"{inventario_vinculado.codigo} no pertenece a la categoría EQUIPO.",
+                    detail=f"{inventario_vinculado.codigo} no pertenece a un grupo de equipos.",
+                )
+            if inventario_vinculado.clasificacion_id != detalle.clasificacion_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{inventario_vinculado.codigo} usa una clasificación diferente.",
                 )
             if inventario_vinculado.unidad_medida_id != detalle.unidad_medida_id:
                 raise HTTPException(
@@ -784,6 +833,7 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
                 )
         registro.detalles.append(SolicitudEquipoDetalle(
             inventario_id=detalle.inventario_id,
+            clasificacion_id=detalle.clasificacion_id,
             nombre_equipo=(
                 inventario_vinculado.descripcion
                 if inventario_vinculado is not None
@@ -795,7 +845,6 @@ def solicitud_crear(datos: SolicitudEquipoCreate, db: DB):
             codigo_patrimonial=detalle.codigo_patrimonial,
             unidad_medida_id=detalle.unidad_medida_id,
             cantidad=detalle.cantidad,
-            costo_unitario_declarado=detalle.costo_unitario_declarado,
             condicion_salida_id=detalle.condicion_salida_id,
             calibracion_salida=detalle.calibracion_salida,
             fecha_calibracion_salida=detalle.fecha_calibracion_salida,
@@ -896,17 +945,6 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                 detail="Debe confirmar la recepción de todos los equipos de la solicitud.",
             )
 
-        categoria = db.scalar(
-            select(Categoria).where(
-                func.upper(func.trim(Categoria.nombre)) == "EQUIPO",
-                Categoria.activo,
-            )
-        )
-        if categoria is None:
-            raise HTTPException(
-                status_code=409,
-                detail="No existe una categoría EQUIPO activa para registrar el ingreso.",
-            )
         tipo_entrada = db.scalar(
             select(TipoMovimiento).where(
                 TipoMovimiento.codigo == "ENTRADA",
@@ -955,10 +993,10 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                         status_code=404,
                         detail=f"Artículo para {detalle.nombre_equipo} no encontrado o inactivo.",
                     )
-                if inventario.categoria.nombre.strip().upper() != "EQUIPO":
+                if inventario.clasificacion.grupo.nombre.strip().upper() not in EQUIPMENT_GROUPS:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"{inventario.codigo} no pertenece a la categoría EQUIPO.",
+                        detail=f"{inventario.codigo} no pertenece a un grupo de equipos.",
                     )
                 if inventario.unidad_medida_id != detalle.unidad_medida_id:
                     raise HTTPException(
@@ -1001,9 +1039,12 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                             ),
                         )
                 inventario = Inventario(
-                    codigo=recibido.codigo_inventario or _siguiente_codigo_inventario(db),
+                    codigo=(
+                        recibido.codigo_inventario
+                        or _siguiente_codigo_inventario(db, detalle.clasificacion.grupo_id)
+                    ),
                     descripcion=detalle.nombre_equipo,
-                    categoria_id=categoria.id,
+                    clasificacion_id=detalle.clasificacion_id,
                     unidad_medida_id=unidad.id,
                     ubicacion_id=destino.id,
                     condicion_id=(
@@ -1011,7 +1052,6 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                     ),
                     stock_actual=Decimal("0"),
                     stock_minimo=None,
-                    costo_unitario=None,
                     fecha_ultima_entrada=ahora.date(),
                     calibracion=calibracion_final,
                     fecha_calibracion=fecha_calibracion_final,
@@ -1027,25 +1067,9 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                 db.flush()
 
             cantidad = Decimal(detalle.cantidad)
-            costo_ingreso = detalle.costo_unitario_declarado
-            if costo_ingreso is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"El detalle {detalle.nombre_equipo} no tiene costo unitario declarado.",
-                )
             stock_anterior = inventario.stock_actual
             stock_posterior = stock_anterior + cantidad
-            costo_anterior = inventario.costo_unitario
-            costo_base = costo_anterior if costo_anterior is not None else costo_ingreso
-            costo_posterior = (
-                (
-                    (stock_anterior * costo_base)
-                    + (cantidad * costo_ingreso)
-                )
-                / stock_posterior
-            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             inventario.stock_actual = stock_posterior
-            inventario.costo_unitario = costo_posterior
             inventario.fecha_ultima_entrada = ahora.date()
             inventario.condicion_id = (
                 recibido.condicion_recepcion_id or inventario.condicion_id
@@ -1071,9 +1095,6 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
                     cantidad=cantidad,
                     stock_anterior=stock_anterior,
                     stock_posterior=stock_posterior,
-                    costo_unitario_anterior=costo_anterior,
-                    costo_unitario_ingreso=costo_ingreso,
-                    costo_unitario_posterior=costo_posterior,
                     ubicacion_origen_id=None,
                     ubicacion_destino_id=destino.id,
                     responsable=datos.usuario_nombre.strip(),
@@ -1110,27 +1131,121 @@ def solicitud_recibir(pk: int, datos: SolicitudRecepcion, db: DB):
         _error_integridad(exc)
 
 
-@app.get("/api/catalogos/categorias", response_model=list[CatalogoBase])
-def categorias_listar(db: DB, todos: bool = False):
-    query = select(Categoria).order_by(Categoria.nombre)
+@app.get("/api/catalogos/grupos", response_model=list[GrupoOut])
+def grupos_listar(db: DB, todos: bool = False):
+    query = select(Grupo).order_by(Grupo.nombre)
     if not todos:
-        query = query.where(Categoria.activo)
+        query = query.where(Grupo.activo)
     return db.scalars(query).all()
 
 
-@app.post("/api/catalogos/categorias", response_model=CatalogoBase, status_code=201)
-def categorias_crear(datos: CatalogoCreate, db: DB):
-    return _catalogo_guardar(db, Categoria, datos)
+@app.post("/api/catalogos/grupos", response_model=GrupoOut, status_code=201)
+def grupos_crear(datos: GrupoCreate, db: DB):
+    return _catalogo_guardar(db, Grupo, datos)
 
 
-@app.put("/api/catalogos/categorias/{pk}", response_model=CatalogoBase)
-def categorias_editar(pk: int, datos: CatalogoCreate, db: DB):
-    return _catalogo_guardar(db, Categoria, datos, pk)
+@app.put("/api/catalogos/grupos/{pk}", response_model=GrupoOut)
+def grupos_editar(pk: int, datos: GrupoCreate, db: DB):
+    return _catalogo_guardar(db, Grupo, datos, pk)
 
 
-@app.patch("/api/catalogos/categorias/{pk}/estado", response_model=CatalogoBase)
-def categorias_estado(pk: int, db: DB):
-    return _catalogo_estado(db, Categoria, pk, "Categoría")
+@app.patch("/api/catalogos/grupos/{pk}/estado", response_model=GrupoOut)
+def grupos_estado(pk: int, db: DB):
+    return _catalogo_estado(db, Grupo, pk, "Grupo")
+
+
+@app.get("/api/catalogos/familias", response_model=list[CatalogoBase])
+def familias_listar(db: DB, todos: bool = False):
+    query = select(Familia).order_by(Familia.nombre)
+    if not todos:
+        query = query.where(Familia.activo)
+    return db.scalars(query).all()
+
+
+@app.post("/api/catalogos/familias", response_model=CatalogoBase, status_code=201)
+def familias_crear(datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, Familia, datos)
+
+
+@app.put("/api/catalogos/familias/{pk}", response_model=CatalogoBase)
+def familias_editar(pk: int, datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, Familia, datos, pk)
+
+
+@app.patch("/api/catalogos/familias/{pk}/estado", response_model=CatalogoBase)
+def familias_estado(pk: int, db: DB):
+    return _catalogo_estado(db, Familia, pk, "Familia")
+
+
+@app.get("/api/catalogos/subfamilias", response_model=list[CatalogoBase])
+def subfamilias_listar(db: DB, todos: bool = False):
+    query = select(Subfamilia).order_by(Subfamilia.nombre)
+    if not todos:
+        query = query.where(Subfamilia.activo)
+    return db.scalars(query).all()
+
+
+@app.post("/api/catalogos/subfamilias", response_model=CatalogoBase, status_code=201)
+def subfamilias_crear(datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, Subfamilia, datos)
+
+
+@app.put("/api/catalogos/subfamilias/{pk}", response_model=CatalogoBase)
+def subfamilias_editar(pk: int, datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, Subfamilia, datos, pk)
+
+
+@app.patch("/api/catalogos/subfamilias/{pk}/estado", response_model=CatalogoBase)
+def subfamilias_estado(pk: int, db: DB):
+    return _catalogo_estado(db, Subfamilia, pk, "Subfamilia")
+
+
+@app.get("/api/catalogos/clasificaciones", response_model=list[ClasificacionOut])
+def clasificaciones_listar(db: DB, todos: bool = False):
+    query = select(Clasificacion).join(Clasificacion.grupo).join(Clasificacion.familia).join(Clasificacion.subfamilia)
+    if not todos:
+        query = query.where(
+            Clasificacion.activo,
+            Grupo.activo,
+            Familia.activo,
+            Subfamilia.activo,
+        )
+    return db.scalars(query.order_by(Grupo.nombre, Familia.nombre, Subfamilia.nombre)).unique().all()
+
+
+def _clasificacion_guardar(db: Session, datos: ClasificacionCreate, pk: int | None = None):
+    grupo = _validar_catalogo_activo(db, Grupo, datos.grupo_id, "Grupo")
+    familia = _validar_catalogo_activo(db, Familia, datos.familia_id, "Familia")
+    subfamilia = _validar_catalogo_activo(db, Subfamilia, datos.subfamilia_id, "Subfamilia")
+    registro = Clasificacion() if pk is None else _obtener(db, Clasificacion, pk, "Clasificación")
+    registro.grupo_id = grupo.id
+    registro.familia_id = familia.id
+    registro.subfamilia_id = subfamilia.id
+    registro.activo = datos.activo
+    registro.actualizado_en = datetime.now(timezone.utc)
+    db.add(registro)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _error_integridad(exc)
+    db.refresh(registro)
+    return registro
+
+
+@app.post("/api/catalogos/clasificaciones", response_model=ClasificacionOut, status_code=201)
+def clasificaciones_crear(datos: ClasificacionCreate, db: DB):
+    return _clasificacion_guardar(db, datos)
+
+
+@app.put("/api/catalogos/clasificaciones/{pk}", response_model=ClasificacionOut)
+def clasificaciones_editar(pk: int, datos: ClasificacionCreate, db: DB):
+    return _clasificacion_guardar(db, datos, pk)
+
+
+@app.patch("/api/catalogos/clasificaciones/{pk}/estado", response_model=ClasificacionOut)
+def clasificaciones_estado(pk: int, db: DB):
+    return _catalogo_estado(db, Clasificacion, pk, "Clasificación")
 
 
 @app.get("/api/catalogos/condiciones", response_model=list[CatalogoBase])
@@ -1202,10 +1317,27 @@ def ubicaciones_estado(pk: int, db: DB):
     return _catalogo_estado(db, Ubicacion, pk, "Ubicación")
 
 
-@app.get("/api/catalogos/almacenes")
-def almacenes_listar(db: DB):
-    registros = db.scalars(select(Almacen).where(Almacen.activo).order_by(Almacen.nombre)).all()
-    return [{"id": r.id, "nombre": r.nombre, "activo": r.activo} for r in registros]
+@app.get("/api/catalogos/almacenes", response_model=list[AlmacenOut])
+def almacenes_listar(db: DB, todos: bool = False):
+    query = select(Almacen).order_by(Almacen.nombre)
+    if not todos:
+        query = query.where(Almacen.activo)
+    return db.scalars(query).all()
+
+
+@app.post("/api/catalogos/almacenes", response_model=AlmacenOut, status_code=201)
+def almacenes_crear(datos: AlmacenCreate, db: DB):
+    return _catalogo_guardar(db, Almacen, datos)
+
+
+@app.put("/api/catalogos/almacenes/{pk}", response_model=AlmacenOut)
+def almacenes_editar(pk: int, datos: AlmacenCreate, db: DB):
+    return _catalogo_guardar(db, Almacen, datos, pk)
+
+
+@app.patch("/api/catalogos/almacenes/{pk}/estado", response_model=AlmacenOut)
+def almacenes_estado(pk: int, db: DB):
+    return _catalogo_estado(db, Almacen, pk, "Almacén")
 
 
 @app.get("/api/catalogos/tipos-movimiento", response_model=list[TipoMovimientoOut])

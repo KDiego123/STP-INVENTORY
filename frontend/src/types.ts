@@ -5,12 +5,27 @@ export type Catalogo = {
   activo: boolean
 }
 
+export type Grupo = Catalogo & {
+  prefijo: string
+}
+
+export type Clasificacion = {
+  id: number
+  grupo_id: number
+  familia_id: number
+  subfamilia_id: number
+  activo: boolean
+  grupo: Grupo
+  familia: Catalogo
+  subfamilia: Catalogo
+}
+
 export type Unidad = Catalogo & {
   codigo: string
   permite_decimal: boolean
 }
 
-export type Almacen = { id: number; nombre: string; activo: boolean }
+export type Almacen = { id: number; nombre: string; descripcion?: string | null; activo: boolean }
 
 export type Ubicacion = {
   id: number
@@ -34,13 +49,12 @@ export type Inventario = {
   id: number
   codigo: string
   descripcion: string
-  categoria_id: number
+  clasificacion_id: number
   unidad_medida_id: number
-  ubicacion_id: number
+  ubicacion_id: number | null
   condicion_id: number | null
   stock_actual: string
   stock_minimo: string | null
-  costo_unitario: string | null
   fecha_ultima_entrada: string | null
   fecha_ultima_salida: string | null
   calibracion: 'NO_CUMPLE' | 'SIN_CALIBRAR' | 'CALIBRADO' | null
@@ -51,9 +65,9 @@ export type Inventario = {
   codigo_patrimonial: string | null
   observaciones: string | null
   activo: boolean
-  categoria: Catalogo
+  clasificacion: Clasificacion
   unidad_medida: Unidad
-  ubicacion: Ubicacion
+  ubicacion: Ubicacion | null
   condicion: Catalogo | null
 }
 
@@ -63,9 +77,6 @@ export type Movimiento = {
   cantidad: string
   stock_anterior: string | null
   stock_posterior: string | null
-  costo_unitario_anterior: string | null
-  costo_unitario_ingreso: string | null
-  costo_unitario_posterior: string | null
   responsable: string | null
   motivo: string | null
   documento: string | null
@@ -87,13 +98,13 @@ export type SolicitudEquipoDetalle = {
   numero_serie: string | null
   codigo_patrimonial: string | null
   cantidad: number
-  costo_unitario_declarado: string | null
   calibracion_salida: Inventario['calibracion']
   fecha_calibracion_salida: string | null
   calibracion_recepcion: Inventario['calibracion']
   fecha_calibracion_recepcion: string | null
   observaciones: string | null
   inventario: Inventario | null
+  clasificacion: Clasificacion
   unidad_medida: Unidad
   condicion_salida: Catalogo | null
   condicion_recepcion: Catalogo | null
@@ -156,7 +167,7 @@ export type Paginated<T> = {
 
 export type Dashboard = {
   articulos_activos: number
-  categorias_activas: number
+  grupos_activos: number
   ubicaciones_activas: number
   stock_bajo: number
   movimientos_recientes: Movimiento[]
@@ -164,7 +175,10 @@ export type Dashboard = {
 }
 
 export type Catalogos = {
-  categorias: Catalogo[]
+  grupos: Grupo[]
+  familias: Catalogo[]
+  subfamilias: Catalogo[]
+  clasificaciones: Clasificacion[]
   unidades: Unidad[]
   ubicaciones: Ubicacion[]
   condiciones: Catalogo[]

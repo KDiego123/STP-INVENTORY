@@ -1,6 +1,5 @@
 from copy import copy
 from datetime import date
-from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
@@ -75,22 +74,24 @@ def generar_inventario_excel(
     worksheet["C2"] = "Fecha de inventario:"
     worksheet["D2"] = inventory_date
     worksheet["D2"].number_format = "dd/mm/yyyy"
+    worksheet["C6"] = "Grupo"
+    worksheet["I6"] = "Marca"
+    worksheet["J6"] = "Modelo"
 
     rows = list(items)
     for index, item in enumerate(rows, start=1):
         row = FIRST_DATA_ROW + index - 1
-        unit_cost = item.costo_unitario
         values = (
             index,
             _safe_excel_text(item.descripcion),
-            _safe_excel_text(item.categoria.nombre),
+            _safe_excel_text(item.clasificacion.grupo.nombre),
             _safe_excel_text(item.unidad_medida.codigo),
             item.stock_actual,
-            _safe_excel_text(item.ubicacion.codigo),
+            _safe_excel_text(item.ubicacion.codigo if item.ubicacion else None),
             item.fecha_ultima_entrada,
             item.fecha_ultima_salida,
-            unit_cost,
-            (item.stock_actual * unit_cost).quantize(Decimal("0.01")) if unit_cost is not None else None,
+            _safe_excel_text(item.marca),
+            _safe_excel_text(item.modelo),
             _safe_excel_text(item.observaciones, "-"),
         )
         for column, value in enumerate(values, start=1):
@@ -99,8 +100,6 @@ def generar_inventario_excel(
             cell.alignment = copy(alignments[column - 1])
         worksheet.cell(row, 7).number_format = "dd/mm/yyyy"
         worksheet.cell(row, 8).number_format = "dd/mm/yyyy"
-        worksheet.cell(row, 9).number_format = '"S/" #,##0.00'
-        worksheet.cell(row, 10).number_format = '"S/" #,##0.00'
         worksheet.row_dimensions[row].height = row_height
 
     last_row = max(FIRST_DATA_ROW, FIRST_DATA_ROW + len(rows) - 1)

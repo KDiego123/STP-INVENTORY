@@ -1,8 +1,39 @@
-# Importacion de Inventario LIMA
+# Migracion del inventario maestro STP
 
-## 1. Preparar Python
+## Preparar el inventario maestro
 
-Desde PowerShell, en este directorio:
+Para fusionar `BD PRODUCTOS STP (1).xlsx` con `Inventario LIMA.xlsx` sin
+modificar los archivos originales:
+
+```powershell
+python .\fusionar_inventarios.py
+```
+
+El resultado se guarda como `INVENTARIO_MAESTRO_STP.xlsx`. Para regenerarlo:
+
+```powershell
+python .\fusionar_inventarios.py --sobrescribir
+```
+
+Todos los articulos del maestro se consideran habilitados para la carga. No se
+usa `ESTADO REVISION` ni se exige aprobacion individual. Las incidencias de
+`CONTROL CALIDAD BD` son informativas y se completaran posteriormente.
+
+El maestro conserva un codigo STP unico por articulo. Cuando varias filas de
+Lima representan el mismo articulo, unidad y ubicacion, suma su stock en una
+sola fila. `CONTROL MIGRACION LIMA` conserva las 251 filas originales como
+trazabilidad de la fusion.
+
+La fusion no incorpora precios ni valorizacion.
+
+## Paso 1: crear un backup completo
+
+El respaldo de `inventario_db` debe incluir esquema y datos. No basta el archivo
+de solo esquema. Mantener el backup fuera del repositorio.
+
+## Paso 2: preparar Python
+
+Desde PowerShell, dentro de `importacion-excel`:
 
 ```powershell
 python -m venv .venv
@@ -10,71 +41,86 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-## 2. Validar el Excel
+## Paso 3: validar tecnicamente el maestro
 
-Este comando no se conecta a PostgreSQL ni modifica datos:
-
-```powershell
-python .\importar_inventario.py --validar
-```
-
-La importacion solo se habilita cuando todas las filas son validas.
-
-## 3. Configurar la conexion
-
-Crear `.env` a partir de `.env.example`:
+Este comando no se conecta a PostgreSQL:
 
 ```powershell
-Copy-Item .\.env.example .\.env
+python .\importar_inventario_maestro.py --validar
 ```
 
-Editar `.env` y colocar el host, usuario y contrasena reales. Para la primera
-carga se puede usar temporalmente el usuario administrador `postgres`. La cuenta
-indicada debe tener permisos sobre `inventario_db`. No compartir ni subir `.env`
-a Git. La aplicacion web usara posteriormente un usuario propio con menos
-privilegios.
+Los avisos de glosario no bloquean la carga. Solo se detiene por errores que
+PostgreSQL no puede almacenar, como codigos repetidos, relaciones obligatorias
+vacias o cantidades invalidas.
 
-Si el script se ejecuta directamente dentro del servidor de PostgreSQL, usar
-`DB_HOST=localhost`. Antes de importar se debe ejecutar
-`001_esquema_inicial.sql` sobre `inventario_db`.
+## Paso 4: detener la aplicacion y reiniciar la base
 
-Las ampliaciones de la aplicación se aplican después de `001`, en orden:
+Con la aplicacion detenida, abrir en pgAdmin el Query Tool de `inventario_db` y
+ejecutar completo:
 
 ```text
-002_calibracion_equipos.sql
-003_fecha_calibracion.sql
-004_solicitudes_equipos.sql
-005_preingreso_equipos.sql
-006_archivos_solicitudes.sql
-007_rechazo_solicitudes.sql
-008_vinculacion_costo_solicitudes.sql
+009_reinicio_inventario_maestro.sql
 ```
 
-## 4. Importar
+Este SQL elimina los datos operativos de prueba, unidades, condiciones,
+ubicaciones y almacenes. Conserva tipos de movimiento, usuarios compartidos,
+roles, FDW, `auth_shared` y configuracion externa de Nextcloud.
 
-Importar inventario y catalogos, sin fabricar historial de movimientos:
+La limpieza y el cambio de estructura se ejecutan en una sola transaccion. Si
+una sentencia falla, PostgreSQL revierte toda la operacion.
+
+No ejecute la migracion 009 con una version antigua de la aplicacion en marcha.
+Debe desplegarse junto con el backend y frontend compatibles.
+
+## Paso 5: configurar la conexion
+
+Crear `importacion-excel\.env` con la conexion real. Si el cargador se ejecuta
+en el propio servidor de PostgreSQL, usar `DB_HOST=localhost`.
+
+```text
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=inventario_db
+DB_USER=postgres
+DB_PASSWORD=CAMBIAR
+```
+
+No compartir ni subir `.env` a Git.
+
+## Paso 6: importar el maestro
 
 ```powershell
-python .\importar_inventario.py --importar
+python .\importar_inventario_maestro.py --importar
 ```
 
-Para registrar ademas un ajuste inicial por cada fila, con fecha tomada de D2:
+El cargador exige que inventario, movimientos, solicitudes, unidades y
+ubicaciones esten vacios. Si encuentra datos, cancela la operacion para impedir
+una mezcla. Toda la carga se confirma o revierte como una sola transaccion.
 
-```powershell
-python .\importar_inventario.py --importar --registrar-stock-inicial
+## Paso 7: verificar
+
+```sql
+SELECT count(*) AS articulos FROM public.inventario;
+SELECT count(*) AS unidades FROM public.unidades_medida;
+SELECT count(*) AS grupos FROM public.grupos;
+SELECT count(*) AS ubicaciones FROM public.ubicaciones;
 ```
 
-La segunda opcion deja trazabilidad del stock inicial. Si se repite, actualiza
-el movimiento inicial existente en lugar de duplicarlo.
+El maestro actual contiene 3416 articulos, 16 unidades, 8 grupos, un almacen y
+16 ubicaciones conocidas de Lima. Los productos sin ubicacion se guardan con
+`ubicacion_id = NULL`.
 
-## Reglas de transformacion
+## Reglas de carga
 
-- Cada fila conserva su identidad y recibe un codigo `LIMA-0001`, `LIMA-0002`, etc.
-- Las descripciones repetidas no se fusionan.
-- Categoria, unidad y ubicacion se normalizan a mayusculas.
-- Los catalogos que no existan se crean automaticamente.
-- `NUEVO`, `USADO` y `MALOGRADO` se guardan como condicion.
-- `-` se transforma en observacion vacia.
-- Los demas textos de la columna Observaciones se conservan como notas.
+- Los codigos STP son unicos.
+- Las 16 unidades se reconstruyen exclusivamente desde la hoja `U M`.
+- Familias y subfamilias usadas por articulos se cargan incluso si aparecen en
+  `CONTROL CALIDAD BD`.
+- Los valores vacios de ubicacion se guardan como `NULL`; no se crean
+  ubicaciones ficticias.
+- `NO APLICA` se almacena internamente como `NO_CUMPLE`; el frontend lo muestra
+  como `No aplica`.
 - La importacion completa se confirma o revierte como una sola transaccion.
-- Si se repite un codigo, el registro de inventario se actualiza y no se duplica.
+
+La limpieza de metadatos de solicitudes no elimina automaticamente los archivos
+de prueba guardados en Nextcloud. Esos archivos se retiran por separado.

@@ -1,8 +1,10 @@
 import type {
   Almacen,
   Catalogo,
+  Clasificacion,
   Dashboard,
   Inventario,
+  Grupo,
   Movimiento,
   Paginated,
   SolicitudEquipo,
@@ -52,7 +54,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 export const inventoryApi = {
   list: (params: Record<string, string | number>) => api<Paginated<Inventario>>('/inventario', { params }),
   get: (id: number) => api<Inventario>(`/inventario/${id}`),
-  nextCode: () => api<{ codigo: string }>('/inventario/siguiente-codigo'),
+  nextCode: (grupoId: number) => api<{ codigo: string }>('/inventario/siguiente-codigo', { params: { grupo_id: grupoId } }),
   create: (body: unknown) => api<Inventario>('/inventario', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: unknown) => api<Inventario>(`/inventario/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   toggle: (id: number) => api<Inventario>(`/inventario/${id}/estado`, { method: 'PATCH' }),
@@ -95,11 +97,14 @@ export const equipmentRequestsApi = {
 }
 
 export const catalogsApi = {
-  categories: (all = false) => api<Catalogo[]>('/catalogos/categorias', { params: { todos: all } }),
+  groups: (all = false) => api<Grupo[]>('/catalogos/grupos', { params: { todos: all } }),
+  families: (all = false) => api<Catalogo[]>('/catalogos/familias', { params: { todos: all } }),
+  subfamilies: (all = false) => api<Catalogo[]>('/catalogos/subfamilias', { params: { todos: all } }),
+  classifications: (all = false) => api<Clasificacion[]>('/catalogos/clasificaciones', { params: { todos: all } }),
   units: (all = false) => api<Unidad[]>('/catalogos/unidades', { params: { todos: all } }),
   locations: (all = false) => api<Ubicacion[]>('/catalogos/ubicaciones', { params: { todos: all } }),
   conditions: (all = false) => api<Catalogo[]>('/catalogos/condiciones', { params: { todos: all } }),
-  warehouses: () => api<Almacen[]>('/catalogos/almacenes'),
+  warehouses: (all = false) => api<Almacen[]>('/catalogos/almacenes', { params: { todos: all } }),
   movementTypes: () => api<TipoMovimiento[]>('/catalogos/tipos-movimiento'),
   save: (type: string, body: unknown, id?: number) =>
     api(`/${`catalogos/${type}`}${id ? `/${id}` : ''}`, {

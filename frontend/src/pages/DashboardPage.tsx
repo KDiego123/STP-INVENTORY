@@ -20,7 +20,7 @@ export function DashboardPage({ navigate }: { navigate: (page: PageKey) => void 
     <div className="page-heading"><div><p className="eyebrow">Resumen general</p><h1>Panel de inventario</h1><p>Estado actual del almacén de Lima.</p></div><button className="btn btn-primary" onClick={() => navigate('movimientos')}>＋ Registrar movimiento</button></div>
     <section className="stats-grid">
       <button className="stat-card" onClick={() => navigate('inventario')}><span className="stat-icon blue">▦</span><div><small>Artículos activos</small><strong>{data.articulos_activos}</strong></div><b>→</b></button>
-      <button className="stat-card" onClick={() => navigate('configuracion')}><span className="stat-icon teal">◇</span><div><small>Categorías</small><strong>{data.categorias_activas}</strong></div><b>→</b></button>
+      <button className="stat-card" onClick={() => navigate('configuracion')}><span className="stat-icon teal">◇</span><div><small>Grupos</small><strong>{data.grupos_activos}</strong></div><b>→</b></button>
       <button className="stat-card" onClick={() => navigate('configuracion')}><span className="stat-icon amber">⌖</span><div><small>Ubicaciones</small><strong>{data.ubicaciones_activas}</strong></div><b>→</b></button>
       <button className={`stat-card ${data.stock_bajo ? 'danger' : ''}`} onClick={() => navigate('inventario')}><span className="stat-icon red">!</span><div><small>Alertas de stock</small><strong>{data.stock_bajo}</strong></div><b>→</b></button>
     </section>

@@ -1,4 +1,5 @@
 backend/.env
+importacion-excel/.env
 backend/.venv/
 backend/__pycache__/
 **/__pycache__/

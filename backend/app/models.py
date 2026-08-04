@@ -21,15 +21,55 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
 
-class Categoria(Base):
-    __tablename__ = "categorias"
+class Grupo(Base):
+    __tablename__ = "grupos"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100), unique=True)
+    prefijo: Mapped[str] = mapped_column(String(12), unique=True)
     descripcion: Mapped[str | None] = mapped_column(Text)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Familia(Base):
+    __tablename__ = "familias"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(150), unique=True)
+    descripcion: Mapped[str | None] = mapped_column(Text)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Subfamilia(Base):
+    __tablename__ = "subfamilias"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(180), unique=True)
+    descripcion: Mapped[str | None] = mapped_column(Text)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Clasificacion(Base):
+    __tablename__ = "clasificaciones"
+    __table_args__ = (UniqueConstraint("grupo_id", "familia_id", "subfamilia_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    grupo_id: Mapped[int] = mapped_column(ForeignKey("grupos.id"))
+    familia_id: Mapped[int] = mapped_column(ForeignKey("familias.id"))
+    subfamilia_id: Mapped[int] = mapped_column(ForeignKey("subfamilias.id"))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    grupo: Mapped[Grupo] = relationship(lazy="selectin")
+    familia: Mapped[Familia] = relationship(lazy="selectin")
+    subfamilia: Mapped[Subfamilia] = relationship(lazy="selectin")
 
 
 class UnidadMedida(Base):
@@ -99,13 +139,12 @@ class Inventario(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     codigo: Mapped[str] = mapped_column(String(50), unique=True)
     descripcion: Mapped[str] = mapped_column(Text)
-    categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias.id"))
+    clasificacion_id: Mapped[int] = mapped_column(ForeignKey("clasificaciones.id"))
     unidad_medida_id: Mapped[int] = mapped_column(ForeignKey("unidades_medida.id"))
-    ubicacion_id: Mapped[int] = mapped_column(ForeignKey("ubicaciones.id"))
+    ubicacion_id: Mapped[int | None] = mapped_column(ForeignKey("ubicaciones.id"))
     condicion_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
     stock_actual: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     stock_minimo: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
-    costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     fecha_ultima_entrada: Mapped[date | None] = mapped_column(Date)
     fecha_ultima_salida: Mapped[date | None] = mapped_column(Date)
     calibracion: Mapped[str | None] = mapped_column(String(20))
@@ -119,9 +158,9 @@ class Inventario(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    categoria: Mapped[Categoria] = relationship(lazy="selectin")
+    clasificacion: Mapped[Clasificacion] = relationship(lazy="selectin")
     unidad_medida: Mapped[UnidadMedida] = relationship(lazy="selectin")
-    ubicacion: Mapped[Ubicacion] = relationship(lazy="selectin")
+    ubicacion: Mapped[Ubicacion | None] = relationship(lazy="selectin")
     condicion: Mapped[Condicion | None] = relationship(lazy="selectin")
 
 
@@ -135,9 +174,6 @@ class Movimiento(Base):
     cantidad: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     stock_anterior: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     stock_posterior: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
-    costo_unitario_anterior: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
-    costo_unitario_ingreso: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
-    costo_unitario_posterior: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     ubicacion_origen_id: Mapped[int | None] = mapped_column(ForeignKey("ubicaciones.id"))
     ubicacion_destino_id: Mapped[int | None] = mapped_column(ForeignKey("ubicaciones.id"))
     responsable: Mapped[str | None] = mapped_column(String(150))
@@ -209,6 +245,7 @@ class SolicitudEquipoDetalle(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     solicitud_id: Mapped[int] = mapped_column(ForeignKey("solicitudes_equipos.id", ondelete="CASCADE"))
     inventario_id: Mapped[int | None] = mapped_column(ForeignKey("inventario.id"))
+    clasificacion_id: Mapped[int] = mapped_column(ForeignKey("clasificaciones.id"))
     nombre_equipo: Mapped[str] = mapped_column(String(250))
     marca: Mapped[str | None] = mapped_column(String(100))
     modelo: Mapped[str | None] = mapped_column(String(100))
@@ -216,7 +253,6 @@ class SolicitudEquipoDetalle(Base):
     codigo_patrimonial: Mapped[str | None] = mapped_column(String(120))
     unidad_medida_id: Mapped[int] = mapped_column(ForeignKey("unidades_medida.id"))
     cantidad: Mapped[int] = mapped_column(Integer)
-    costo_unitario_declarado: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     condicion_salida_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
     calibracion_salida: Mapped[str | None] = mapped_column(String(20))
     fecha_calibracion_salida: Mapped[date | None] = mapped_column(Date)
@@ -226,6 +262,7 @@ class SolicitudEquipoDetalle(Base):
     observaciones: Mapped[str | None] = mapped_column(Text)
 
     inventario: Mapped[Inventario | None] = relationship(lazy="selectin")
+    clasificacion: Mapped[Clasificacion] = relationship(lazy="selectin")
     unidad_medida: Mapped[UnidadMedida] = relationship(lazy="selectin")
     condicion_salida: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_salida_id], lazy="selectin")
     condicion_recepcion: Mapped[Condicion | None] = relationship(foreign_keys=[condicion_recepcion_id], lazy="selectin")

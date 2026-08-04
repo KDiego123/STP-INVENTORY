@@ -41,7 +41,7 @@ export function MovementsPage({ notify }: { notify: (message: string, type?: 'su
     setPage(1)
   }
   const cancel = async (item: Movimiento) => {
-    if (!window.confirm(`¿Anular el movimiento #${item.id}? El stock${item.costo_unitario_ingreso !== null ? ' y el costo promedio' : ''} serán revertidos.`)) return
+    if (!window.confirm(`¿Anular el movimiento #${item.id}? El stock será revertido.`)) return
     try { await movementsApi.cancel(item.id); notify('Movimiento anulado y valores revertidos.'); await load() }
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo anular.', 'error') }
   }
@@ -62,12 +62,11 @@ export function MovementsPage({ notify }: { notify: (message: string, type?: 'su
     </div>
     {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card">
       <div className="table-summary"><strong>{data?.total ?? 0}</strong> movimientos encontrados</div>
-      <div className="table-responsive"><table><thead><tr><th>Fecha</th><th>Tipo y artículo</th><th className="numeric">Cantidad</th><th>Stock</th><th>Costo unitario</th><th>Responsable</th><th>Documento</th><th>Estado</th><th /></tr></thead>
+      <div className="table-responsive"><table><thead><tr><th>Fecha</th><th>Tipo y artículo</th><th className="numeric">Cantidad</th><th>Stock</th><th>Responsable</th><th>Documento</th><th>Estado</th><th /></tr></thead>
         <tbody>{data?.items.map((item) => <tr key={item.id} className={item.anulado ? 'row-muted' : ''}>
           <td>{formatDate(item.fecha, true)}</td><td><strong>{item.tipo_movimiento.nombre}</strong><small className="item-subtitle">{item.inventario.codigo} · {item.inventario.descripcion}</small></td>
           <td className="numeric"><strong>{formatNumber(item.cantidad)}</strong><small>{item.inventario.unidad_medida.codigo}</small></td>
           <td>{formatNumber(item.stock_anterior)} → {formatNumber(item.stock_posterior)}</td>
-          <td>{item.costo_unitario_ingreso !== null ? <><strong>S/ {Number(item.costo_unitario_anterior ?? 0).toFixed(2)} → S/ {Number(item.costo_unitario_posterior ?? 0).toFixed(2)}</strong><small className="item-subtitle">Ingreso: S/ {Number(item.costo_unitario_ingreso).toFixed(2)}</small></> : '—'}</td>
           <td>{item.responsable || '—'}</td><td>{item.documento || '—'}</td>
           <td><span className={`badge ${item.anulado ? 'badge-neutral' : 'badge-success'}`}>{item.anulado ? 'Anulado' : 'Vigente'}</span></td>
           <td>{!item.anulado && <button className="btn btn-ghost btn-sm text-danger" onClick={() => void cancel(item)}>Anular</button>}</td>
@@ -89,7 +88,7 @@ function MovementForm({ options, onClose, onSaved }: { options: Options; onClose
     const next = { ...form, [key]: value }
     if (key === 'inventario_id') {
       const item = options.inventario.find((x) => x.id === Number(value))
-      if (item) { next.ubicacion_origen_id = String(item.ubicacion_id); next.ubicacion_destino_id = String(item.ubicacion_id) }
+      if (item) { next.ubicacion_origen_id = item.ubicacion_id ? String(item.ubicacion_id) : ''; next.ubicacion_destino_id = item.ubicacion_id ? String(item.ubicacion_id) : '' }
     }
     setForm(next)
   }
