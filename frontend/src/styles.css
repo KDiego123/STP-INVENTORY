@@ -392,9 +392,9 @@ input:focus, select:focus, textarea:focus { border-color: #4a9a98 !important; bo
 .inventory-quick-filters button:hover { border-color: #77aaa6; color: #176f70; }
 .inventory-quick-filters button.active { border-color: #16847a; color: white; background: #16847a; box-shadow: 0 4px 12px rgba(22, 132, 122, .18); }
 .inventory-quick-filters button.active.danger { border-color: #b84248; background: #b84248; }
-.inventory-advanced-filters { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)) auto; align-items: end; gap: 10px; padding-top: 12px; border-top: 1px solid #e7edef; }
-.inventory-advanced-filters > label { display: grid; gap: 5px; color: #5d7480; font-size: 9px; font-weight: 800; }
-.inventory-advanced-filters select, .inventory-sticky-pagination select { min-height: 38px; padding: 6px 30px 6px 9px; border: 1px solid #cfdae0; border-radius: 8px; color: #29404e; background: white; }
+.inventory-advanced-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; column-gap: 14px; row-gap: 12px; padding-top: 14px; border-top: 1px solid #e7edef; }
+.inventory-advanced-filters > label { display: grid; min-width: 0; gap: 6px; color: #5d7480; font-size: 9px; font-weight: 800; }
+.inventory-advanced-filters select, .inventory-sticky-pagination select { width: 100%; min-width: 0; min-height: 38px; padding: 6px 30px 6px 10px; border: 1px solid #cfdae0; border-radius: 8px; color: #29404e; background: white; }
 .inventory-table-card { max-height: calc(100vh - 285px); min-height: 360px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
 .inventory-table-card .table-responsive { min-height: 0; overflow: auto; }
 .inventory-table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 14px; border-bottom: 1px solid #e5ecef; }

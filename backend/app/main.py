@@ -208,6 +208,13 @@ def inventario_listar(
                 Inventario.numero_serie.ilike(patron),
                 Inventario.codigo_patrimonial.ilike(patron),
                 Inventario.observaciones.ilike(patron),
+                Inventario.clasificacion.has(
+                    or_(
+                        Clasificacion.grupo.has(Grupo.nombre.ilike(patron)),
+                        Clasificacion.familia.has(Familia.nombre.ilike(patron)),
+                        Clasificacion.subfamilia.has(Subfamilia.nombre.ilike(patron)),
+                    )
+                ),
             )
         )
     if grupo_id:
