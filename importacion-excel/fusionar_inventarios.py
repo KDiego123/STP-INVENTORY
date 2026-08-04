@@ -35,8 +35,11 @@ MASTER_HEADERS = [
     "OBSERVACIONES", "ACTIVO", "ORIGEN",
 ]
 
+EPP_GROUP = "EQUIPO DE PROTECCION PERSONAL"
+GROUP_ALIASES = {"EPP": EPP_GROUP}
+
 PREFIX_BY_GROUP = {
-    "EPP": "EPP", "MATERIAL": "MAT", "HERRAMIENTA": "HER", "ANDAMIO": "AND",
+    EPP_GROUP: "EPP", "MATERIAL": "MAT", "HERRAMIENTA": "HER", "ANDAMIO": "AND",
     "ACTIVO": "ACT", "EQUIPO": "EQP", "EQUIPO DE COMPUTO": "EQPCOM",
     "MAQ EQP PESADO": "MAQEQP",
 }
@@ -158,7 +161,7 @@ def read_products(workbook) -> list[ProductRow]:
         products.append(ProductRow(
             source_row=row_number, code=code, description=clean_text(row[2]),
             serial=clean_text(row[3]), unit=clean_text(row[5]),
-            group=clean_text(row[7]),
+            group=GROUP_ALIASES.get(clean_text(row[7]), clean_text(row[7])),
             family=FAMILY_ALIASES.get(clean_text(row[8]), clean_text(row[8])),
             subfamily=SUBFAMILY_ALIASES.get(clean_text(row[9]), clean_text(row[9])),
             observations=clean_text(row[10]), brand=clean_text(row[11]),
@@ -183,11 +186,11 @@ def classify_lima(category: str, description: str) -> Classification:
         ]
         for words, subfamily, confidence in rules:
             if any(word in text for word in words):
-                return classification("EPP", "ARTICULO DE SEGURIDAD", subfamily, confidence, f"Regla EPP: {subfamily}")
-        return classification("EPP", "ARTICULO DE SEGURIDAD", "OTRO ARTICULO DE SEGURIDAD", "BAJA", "EPPS sin palabra especifica")
+                return classification(EPP_GROUP, "ARTICULO DE SEGURIDAD", subfamily, confidence, f"Regla EPP: {subfamily}")
+        return classification(EPP_GROUP, "ARTICULO DE SEGURIDAD", "OTRO ARTICULO DE SEGURIDAD", "BAJA", "EPPS sin palabra especifica")
 
     if category_key == "INDUMENTARIA":
-        return classification("EPP", "ARTICULO DE SEGURIDAD", "UNIFORME", "ALTA", "Categoria INDUMENTARIA")
+        return classification(EPP_GROUP, "ARTICULO DE SEGURIDAD", "UNIFORME", "ALTA", "Categoria INDUMENTARIA")
 
     if category_key == "ELEMENTO DE SUJECION":
         if "TUERCA" in text:
@@ -449,7 +452,10 @@ def build_workbook(products_wb, products: list[ProductRow], lima_rows: list[Lima
     output = Workbook()
     output.remove(output.active)
     units_glossary = read_glossary(products_wb, "U M", 2)
-    groups_glossary = read_glossary(products_wb, "GRUPO")
+    groups_glossary = [
+        (GROUP_ALIASES.get(row[0], row[0]),)
+        for row in read_glossary(products_wb, "GRUPO")
+    ]
     families_glossary = read_glossary(products_wb, "FAMILIA")
     subfamilies_glossary = read_glossary(products_wb, "SUB FAMILIA")
     unit_codes = {row[1] for row in units_glossary}

@@ -113,6 +113,7 @@ El maestro actual contiene 3416 articulos, 16 unidades, 8 grupos, un almacen y
 ## Reglas de carga
 
 - Los codigos STP son unicos.
+- El grupo `EQUIPO DE PROTECCION PERSONAL` conserva el prefijo de codificacion `EPP`.
 - Las 16 unidades se reconstruyen exclusivamente desde la hoja `U M`.
 - Familias y subfamilias usadas por articulos se cargan incluso si aparecen en
   `CONTROL CALIDAD BD`.

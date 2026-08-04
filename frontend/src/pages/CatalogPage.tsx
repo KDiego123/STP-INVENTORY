@@ -39,6 +39,7 @@ function itemText(item: Item) {
 
 function itemTitle(item: Item) {
   if (isClassification(item)) return `${item.grupo.nombre} › ${item.familia.nombre} › ${item.subfamilia.nombre}`
+  if ('prefijo' in item && item.prefijo === 'EPP') return 'Equipo de Protección Personal'
   if ('codigo' in item) return item.codigo
   return item.nombre
 }
