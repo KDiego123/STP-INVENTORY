@@ -47,7 +47,8 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const tableCardRef = useRef<HTMLElement>(null)
+  const inventoryMountedRef = useRef(false)
   const [selected, setSelected] = useState<Inventario | null>(null)
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
   const [statusPending, setStatusPending] = useState<Inventario | null>(null)
@@ -70,7 +71,11 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   }, [applied, page, pageSize])
   useEffect(() => { void load() }, [load])
   useEffect(() => {
-    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
+    if (!inventoryMountedRef.current) {
+      inventoryMountedRef.current = true
+      return
+    }
+    tableCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [page])
 
   const search = (event: FormEvent) => { event.preventDefault(); setPage(1); setApplied(filters) }
@@ -142,9 +147,9 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
         <div className="filter-actions"><button className="btn btn-primary">Aplicar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
       </div>}
     </form>
-    {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card inventory-table-card">
+    {error ? <ErrorNotice message={error} onRetry={load} /> : loading && !data ? <Loader /> : <section className="card table-card inventory-table-card" ref={tableCardRef}>
       <div className="inventory-table-toolbar"><strong>{data?.total ?? 0} artículos</strong><div><span>Ordenar por ID</span><button type="button" className="btn btn-secondary sort-button" onClick={toggleOrder} title="Alternar el orden por ID">{applied.orden === 'desc' ? '↓ Más recientes' : '↑ Más antiguos'}</button></div></div>
-      <div className="table-responsive" ref={tableScrollRef}><table className="inventory-modern-table"><thead><tr><th>Artículo</th><th>Tipo de ítem</th><th>Ubicación</th><th>Stock</th><th>Condición</th><th>Calibración</th><th>Estado</th>{!readOnly && <th className="inventory-actions-heading">Acciones</th>}<th /></tr></thead>
+      <div className="table-responsive"><table className="inventory-modern-table"><thead><tr><th>Artículo</th><th>Tipo de ítem</th><th>Ubicación</th><th>Stock</th><th>Condición</th><th>Calibración</th><th>Estado</th>{!readOnly && <th className="inventory-actions-heading">Acciones</th>}<th /></tr></thead>
         <tbody>{data?.items.map((item) => {
           const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
           return <tr
