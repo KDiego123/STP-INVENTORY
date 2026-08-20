@@ -262,6 +262,9 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
           <DetailValue label="Familia" value={item.clasificacion.familia.nombre} />
           <DetailValue label="Subfamilia" value={item.clasificacion.subfamilia.nombre} />
           <DetailValue label="Marca" value={item.marca} />
+          <DetailValue label="Modelo" value={item.modelo} />
+          <DetailValue label="Número de serie" value={item.numero_serie} />
+          <DetailValue label="Código patrimonial" value={item.codigo_patrimonial} />
           <DetailValue label="Ubicación" value={item.ubicacion ? `${item.ubicacion.codigo} · ${item.ubicacion.almacen.nombre}` : null} />
           <DetailValue label="Condición" value={item.condicion?.nombre} />
           <DetailValue label="Stock mínimo" value={item.stock_minimo === null ? null : `${formatNumber(item.stock_minimo)} ${item.unidad_medida.codigo}`} />
@@ -269,11 +272,8 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
       </section>
 
       {isEquipment && <section className="inventory-detail-section">
-        <h3>Identificación y calibración</h3>
+        <h3>Calibración</h3>
         <div className="inventory-detail-grid">
-          <DetailValue label="Modelo" value={item.modelo} />
-          <DetailValue label="Número de serie" value={item.numero_serie} />
-          <DetailValue label="Código patrimonial" value={item.codigo_patrimonial} />
           <DetailValue label="Calibración" value={item.calibracion ? calibrationLabels[item.calibracion] : null} />
           <DetailValue label="Fecha de calibración" value={item.fecha_calibracion ? formatDate(item.fecha_calibracion) : null} />
         </div>
