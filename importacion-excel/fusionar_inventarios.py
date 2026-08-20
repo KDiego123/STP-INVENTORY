@@ -97,14 +97,19 @@ class LimaRow:
 class ProductRow:
     source_row: int
     code: str
+    original_description: str
     description: str
+    model: str
+    model_rule: str
     serial: str
     unit: str
     group: str
     family: str
     subfamily: str
     observations: str
+    original_brand: str
     brand: str
+    brand_rule: str
 
 
 def normalized(value: object) -> str:
@@ -119,6 +124,238 @@ def clean_text(value: object) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return " ".join(str(value).replace("\r", " ").replace("\n", " ").split())
+
+
+UNKNOWN_BRAND_KEYS = {"", "S N", "SN"}
+BRAND_INFERENCE_EXCLUSIONS = {
+    # Son marcas válidas en la fuente, pero demasiado cortas o ambiguas para
+    # deducirlas únicamente por aparecer como palabra en otra descripción.
+    "ABLE", "ALE", "E F", "FR", "HEX", "REY", "SCI", "SLR", "SMC",
+    "SOL", "SP", "TORO", "WD",
+}
+
+# Variantes observadas directamente en las fuentes. Las expresiones con
+# ``requires_marker=True`` solo se aceptan después de la palabra MARCA.
+BRAND_TEXT_RULES: tuple[tuple[re.Pattern[str], str, bool, str], ...] = (
+    (re.compile(r"\bRAD\s+WIN(?=ROLLOS|\b)", re.IGNORECASE), "RAD WIN", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bSTEEL\s*PRO\b", re.IGNORECASE), "STEELPRO", False, "ALIAS NORMALIZADO"),
+    (re.compile(r"\bSTELLPRO\b", re.IGNORECASE), "STEELPRO", True, "ALIAS NORMALIZADO"),
+    (re.compile(r"\bBOSH\b", re.IGNORECASE), "BOSCH", True, "ALIAS NORMALIZADO"),
+    (re.compile(r"\bFLUC\b", re.IGNORECASE), "FLUKE", True, "ALIAS NORMALIZADO"),
+    (re.compile(r"\bB\s*-\s*LINE\b", re.IGNORECASE), "B-LINE", False, "MARCA DECLARADA EN DESCRIPCION"),
+    (re.compile(r"\bOPTECH\b", re.IGNORECASE), "OPTECH", False, "MARCA DECLARADA EN DESCRIPCION"),
+    (re.compile(r"\bHUAWEI\b", re.IGNORECASE), "HUAWEI", False, "MARCA DECLARADA EN DESCRIPCION"),
+    (re.compile(r"\bMOTOROLA\b", re.IGNORECASE), "MOTOROLA", False, "MARCA DECLARADA EN DESCRIPCION"),
+    (re.compile(r"\bSOUTH\b", re.IGNORECASE), "SOUTH", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bSATRA\b", re.IGNORECASE), "SATRA", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bPHELX\b", re.IGNORECASE), "PHELX", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bEVOLITE\b", re.IGNORECASE), "EVOLITE", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bMASTER\s+LONK\b", re.IGNORECASE), "MASTER LONK", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bLIBUS\b", re.IGNORECASE), "LIBUS", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bRTX\b", re.IGNORECASE), "RTX", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bTECHEXPER\b", re.IGNORECASE), "TECHEXPER", True, "MARCADOR EXPLICITO"),
+    (re.compile(r"\bSIMPLE\b", re.IGNORECASE), "SIMPLE", True, "MARCADOR EXPLICITO"),
+)
+
+BRAND_REVIEW_RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    (
+        re.compile(r"\bFORTE\s+STELL\s+PRO\b", re.IGNORECASE),
+        "STEELPRO",
+        "Texto parecido a STEELPRO, pero la grafía no permite confirmarlo automáticamente.",
+    ),
+    (
+        re.compile(r"\bSPRO\b", re.IGNORECASE),
+        "STEELPRO",
+        "SPRO podría ser una abreviatura o una marca distinta.",
+    ),
+)
+BRAND_SERIES_IGNORED_TOKENS = {
+    "A", "AL", "AWG", "C", "CLASE", "CM", "COLOR", "CON", "DE", "DEL",
+    "EL", "EN", "G", "GAL", "GLN", "KG", "L", "LA", "LTS", "M", "ML",
+    "MM", "MT", "MTS", "N", "NRO", "NUMERO", "P", "PARA", "TALLA",
+    "TIPO", "UND", "UNIDAD", "V", "W", "X", "Y",
+}
+
+
+def is_unknown_brand(value: str) -> bool:
+    return normalized(value) in UNKNOWN_BRAND_KEYS
+
+
+def flexible_text_pattern(value: str) -> re.Pattern[str] | None:
+    tokens = normalized(value).split()
+    if not tokens:
+        return None
+    separator = r"[\s.\-_&/]*"
+    return re.compile(
+        r"(?<![A-Za-z0-9])" + separator.join(re.escape(token) for token in tokens) + r"(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+
+
+def marker_before(description: str, position: int) -> re.Match[str] | None:
+    return re.search(r"\bMARCA\s*:?\s*$", description[:position], re.IGNORECASE)
+
+
+def remove_brand_span(description: str, match: re.Match[str]) -> str:
+    start, end = match.span()
+    marker = marker_before(description, start)
+    if marker:
+        start = marker.start()
+
+    left, right = description[:start].rstrip(), description[end:].lstrip()
+    if left.endswith(("-", ",", ";", ":", "/")):
+        left = left[:-1].rstrip()
+    if right.startswith(("-", ",", ";", ":", "/")):
+        right = right[1:].lstrip()
+    return clean_text(f"{left} {right}").strip(" -,:;")
+
+
+def valid_three_m_brand(description: str, match: re.Match[str]) -> bool:
+    """Distingue la marca 3M de longitudes como ``X 3M B-LINE``."""
+    prefix = description[:match.start()]
+    return re.search(r"\bX\s*$", prefix, re.IGNORECASE) is None
+
+
+def extract_brand(
+    description: str,
+    current_brand: str,
+    known_brands: Sequence[str],
+) -> tuple[str, str, str]:
+    """Normaliza marcas explícitas sin deducirlas por coincidencias parciales."""
+    brand = clean_text(current_brand)
+
+    if not is_unknown_brand(brand):
+        current_key = normalized(brand)
+        special_patterns = {
+            "WD": re.compile(r"\bWD\s*-\s*40\b", re.IGNORECASE),
+            "STEELPRO": re.compile(r"\b(?:STEEL\s*PRO|STELLPRO)\b", re.IGNORECASE),
+            "BOSCH": re.compile(r"\b(?:BOSCH|BOSH)\b", re.IGNORECASE),
+            "FLUKE": re.compile(r"\b(?:FLUKE|FLUC)\b", re.IGNORECASE),
+        }
+        pattern = special_patterns.get(current_key) or flexible_text_pattern(brand)
+        if pattern:
+            for match in pattern.finditer(description):
+                if current_key == "3M" and not valid_three_m_brand(description, match):
+                    continue
+                return remove_brand_span(description, match), brand, "MARCA YA INFORMADA EN COLUMNA"
+        return description, brand, ""
+
+    for pattern, canonical, requires_marker, rule in BRAND_TEXT_RULES:
+        for match in pattern.finditer(description):
+            if requires_marker and marker_before(description, match.start()) is None:
+                continue
+            return remove_brand_span(description, match), canonical, rule
+
+    for candidate in known_brands:
+        candidate_key = normalized(candidate)
+        compact_length = len(candidate_key.replace(" ", ""))
+        if compact_length < 4 or candidate_key in BRAND_INFERENCE_EXCLUSIONS:
+            continue
+        pattern = flexible_text_pattern(candidate)
+        if pattern is None:
+            continue
+        match = pattern.search(description)
+        if match:
+            return remove_brand_span(description, match), candidate, "COINCIDENCIA EXACTA CON CATALOGO"
+
+    three_m = re.compile(r"(?<![A-Za-z0-9])3M(?![A-Za-z0-9])", re.IGNORECASE)
+    for match in three_m.finditer(description):
+        if valid_three_m_brand(description, match):
+            return remove_brand_span(description, match), "3M", "COINCIDENCIA 3M VALIDADA"
+
+    return description, brand, ""
+
+
+def brand_series_key(description: str) -> str:
+    """Agrupa variantes que solo cambian en medida, cantidad o presentación."""
+    return " ".join(
+        token
+        for token in normalized(description).split()
+        if token not in BRAND_SERIES_IGNORED_TOKENS and not re.search(r"\d", token)
+    )
+
+
+def similar_brand_reviews(products: Sequence[ProductRow]) -> list[list[object]]:
+    grouped: dict[str, list[ProductRow]] = defaultdict(list)
+    for product in products:
+        grouped[brand_series_key(product.description)].append(product)
+
+    result: list[list[object]] = []
+    for key, rows in grouped.items():
+        if len(key.split()) < 3:
+            continue
+        known = {
+            normalized(product.brand): product.brand
+            for product in rows
+            if not is_unknown_brand(product.brand)
+        }
+        unknown = [product for product in rows if is_unknown_brand(product.brand)]
+        if len(known) != 1 or not unknown:
+            continue
+        suggested_brand = next(iter(known.values()))
+        references = ", ".join(
+            product.code for product in rows if not is_unknown_brand(product.brand)
+        )
+        for product in unknown:
+            result.append([
+                "BD PRODUCTOS", product.source_row, product.code, product.original_description,
+                product.brand, suggested_brand,
+                f"Misma serie descriptiva que {references}; cambia medida o presentacion. Requiere confirmacion.",
+            ])
+    return result
+
+
+MODEL_MARKER = re.compile(
+    r"\b(?:MODELO\s*:|MOD\.\s+|MOD\s*:|MOD\s+(?=[A-Z0-9]))\s*",
+    re.IGNORECASE,
+)
+MODEL_SUFFIX_BOUNDARY = re.compile(
+    r"\s+(?:-\s+)?(?=(?:TALLA|COLOR|LOGO)\s*:?)"
+    r"|\s+(?=P\s+Z87\b)"
+    r"|\s+(?=(?:X|DE)\s+\d+(?:[.,]\d+)?\s*(?:\"|MM\b|CM\b|M\b|ML\b|G\b|KG\b|GAL\b|YDS\b))",
+    re.IGNORECASE,
+)
+
+
+def extract_model(description: str) -> tuple[str, str, str]:
+    """Separa modelos declarados sin confundirlos con medidas o atributos.
+
+    Solo actúa ante marcadores explícitos. Conserva talla, color, certificación
+    y presentaciones como ``X 250 ML`` dentro de la descripción. También admite
+    una descripción compuesta con más de un equipo y modelo.
+    """
+    markers = list(MODEL_MARKER.finditer(description))
+    if not markers:
+        return description, "", ""
+
+    description_parts: list[str] = []
+    models: list[str] = []
+    cursor = 0
+    for index, marker in enumerate(markers):
+        description_parts.append(description[cursor:marker.start()])
+        segment_end = markers[index + 1].start() if index + 1 < len(markers) else len(description)
+        segment = description[marker.end():segment_end].strip()
+
+        boundary = MODEL_SUFFIX_BOUNDARY.search(segment)
+        if index + 1 < len(markers):
+            compound_boundary = re.search(r"\s+\+\s+", segment)
+            if compound_boundary and (boundary is None or compound_boundary.start() < boundary.start()):
+                boundary = compound_boundary
+
+        model = (segment[:boundary.start()] if boundary else segment).strip(" -,:;")
+        retained = (segment[boundary.start():] if boundary else "").strip(" -,:;")
+        if not model:
+            return description, "", ""
+        models.append(model)
+        if retained:
+            description_parts.append(f" {retained} ")
+        cursor = segment_end
+
+    description_parts.append(description[cursor:])
+    cleaned_description = clean_text(" ".join(description_parts)).strip(" -,:;")
+    model_value = " / ".join(models)
+    rule = "MULTIMODELO" if len(models) > 1 else "MARCADOR EXPLICITO"
+    return cleaned_description, model_value, rule
 
 
 def decimal_or_none(value: object) -> Decimal | None:
@@ -151,20 +388,36 @@ def read_glossary(workbook, sheet_name: str, columns: int = 1) -> list[tuple[str
 def read_products(workbook) -> list[ProductRow]:
     products: list[ProductRow] = []
     codes: set[str] = set()
-    for row_number, row in enumerate(workbook["BD"].iter_rows(min_row=2, values_only=True), 2):
+    source_rows = list(enumerate(workbook["BD"].iter_rows(min_row=2, values_only=True), 2))
+    known_brands = sorted(
+        {
+            clean_text(row[11])
+            for _, row in source_rows
+            if len(row) > 11 and clean_text(row[11]) and not is_unknown_brand(clean_text(row[11]))
+        },
+        key=lambda value: len(normalized(value)),
+        reverse=True,
+    )
+    for row_number, row in source_rows:
         code = clean_text(row[1] if len(row) > 1 else None)
         if not code:
             continue
         if code in codes:
             raise ValueError(f"Codigo STP duplicado en BD, fila {row_number}: {code}")
         codes.add(code)
+        original_description = clean_text(row[2])
+        description, model, model_rule = extract_model(original_description)
+        original_brand = clean_text(row[11])
+        description, brand, brand_rule = extract_brand(description, original_brand, known_brands)
         products.append(ProductRow(
-            source_row=row_number, code=code, description=clean_text(row[2]),
+            source_row=row_number, code=code, original_description=original_description,
+            description=description, model=model, model_rule=model_rule,
             serial=clean_text(row[3]), unit=clean_text(row[5]),
             group=GROUP_ALIASES.get(clean_text(row[7]), clean_text(row[7])),
             family=FAMILY_ALIASES.get(clean_text(row[8]), clean_text(row[8])),
             subfamily=SUBFAMILY_ALIASES.get(clean_text(row[9]), clean_text(row[9])),
-            observations=clean_text(row[10]), brand=clean_text(row[11]),
+            observations=clean_text(row[10]), original_brand=original_brand,
+            brand=brand, brand_rule=brand_rule,
         ))
     return products
 
@@ -464,6 +717,9 @@ def build_workbook(products_wb, products: list[ProductRow], lima_rows: list[Lima
     subfamilies = {row[0] for row in subfamilies_glossary}
     master_rows: list[list[object]] = []
     quality_rows: list[list[object]] = []
+    model_audit_rows: list[list[object]] = []
+    brand_audit_rows: list[list[object]] = []
+    brand_review_rows: list[list[object]] = []
 
     for product in products:
         unit = UNIT_ALIASES.get(product.unit, (product.unit, Decimal("1")))[0]
@@ -474,25 +730,75 @@ def build_workbook(products_wb, products: list[ProductRow], lima_rows: list[Lima
                 issues.append(f"{field} fuera del glosario: {value}")
         for issue in issues:
             quality_rows.append(["BD PRODUCTOS", product.source_row, product.code, product.description, issue])
+        if product.model:
+            model_audit_rows.append([
+                "BD PRODUCTOS", product.source_row, product.code, product.original_description,
+                product.description, product.model, product.model_rule,
+            ])
+        if product.brand_rule:
+            brand_audit_rows.append([
+                "BD PRODUCTOS", product.source_row, product.code, product.original_description,
+                product.description, product.original_brand, product.brand, product.brand_rule,
+            ])
+        for pattern, suggested_brand, reason in BRAND_REVIEW_RULES:
+            if pattern.search(product.original_description) and normalized(product.brand) != normalized(suggested_brand):
+                brand_review_rows.append([
+                    "BD PRODUCTOS", product.source_row, product.code, product.original_description,
+                    product.brand, suggested_brand, reason,
+                ])
+        for pattern, suggested_brand, requires_marker, _ in BRAND_TEXT_RULES:
+            match = pattern.search(product.original_description)
+            if not match or normalized(product.brand) == normalized(suggested_brand):
+                continue
+            if requires_marker and marker_before(product.original_description, match.start()) is None:
+                continue
+            brand_review_rows.append([
+                "BD PRODUCTOS", product.source_row, product.code, product.original_description,
+                product.brand, suggested_brand,
+                "La descripcion declara otra marca, pero se conserva el valor existente para revision.",
+            ])
         master_rows.append([
             len(master_rows) + 1, product.code, "", product.description, product.group, product.family,
-            product.subfamily, unit, product.brand, "", product.serial, "", "", "", "", "", "", "",
+            product.subfamily, unit, product.brand, product.model, product.serial, "", "", "", "", "", "", "",
             "", "", "", product.observations, "SI", "BD PRODUCTOS",
         ])
 
-    brands = sorted({p.brand for p in products if p.brand and normalized(p.brand) not in {"S N", "SN"}}, key=len, reverse=True)
+    brand_review_rows.extend(similar_brand_reviews(products))
+
+    brands = sorted(
+        {p.brand for p in products if p.brand and not is_unknown_brand(p.brand)},
+        key=lambda value: len(normalized(value)),
+        reverse=True,
+    )
     migration_rows = []
     for rows_for_code in consolidated_lima_rows(lima_rows):
         row = rows_for_code[0]
-        inferred_brand = next((brand for brand in brands if len(normalized(brand)) >= 2 and normalized(brand) in normalized(row.description)), "")
+        clean_description, model, model_rule = extract_model(row.description)
+        clean_description, inferred_brand, brand_rule = extract_brand(clean_description, "", brands)
+        if model:
+            model_audit_rows.append([
+                "INVENTARIO LIMA", row.source_row, row.proposed_code, row.description,
+                clean_description, model, model_rule,
+            ])
+        if brand_rule:
+            brand_audit_rows.append([
+                "INVENTARIO LIMA", row.source_row, row.proposed_code, row.description,
+                clean_description, "", inferred_brand, brand_rule,
+            ])
+        for pattern, suggested_brand, reason in BRAND_REVIEW_RULES:
+            if pattern.search(row.description) and normalized(inferred_brand) != normalized(suggested_brand):
+                brand_review_rows.append([
+                    "INVENTARIO LIMA", row.source_row, row.proposed_code, row.description,
+                    inferred_brand, suggested_brand, reason,
+                ])
         requires_calibration = row.classification.group in {"EQUIPO", "EQUIPO DE COMPUTO", "ACTIVO", "MAQ EQP PESADO"}
         conditions = {item.condition for item in rows_for_code}
         condition = next(iter(conditions)) if len(conditions) == 1 else "SIN CONDICION"
         observations = list(dict.fromkeys(item.observations for item in rows_for_code if item.observations))
         master_rows.append([
-            len(master_rows) + 1, row.proposed_code, ", ".join(item.old_code for item in rows_for_code), row.description,
+            len(master_rows) + 1, row.proposed_code, ", ".join(item.old_code for item in rows_for_code), clean_description,
             row.classification.group, row.classification.family, row.classification.subfamily,
-            row.unit, inferred_brand, "", "", "", "ALMACEN LIMA", row.location,
+            row.unit, inferred_brand, model, "", "", "ALMACEN LIMA", row.location,
             sum((item.stock for item in rows_for_code), Decimal("0")), "",
             condition, "" if requires_calibration else "NO APLICA", "",
             latest_date(item.last_entry for item in rows_for_code),
@@ -528,6 +834,38 @@ def build_workbook(products_wb, products: list[ProductRow], lima_rows: list[Lima
 
     quality = make_sheet(output, "CONTROL CALIDAD BD", ["ORIGEN", "FILA", "CODIGO", "DESCRIPCION", "INCIDENCIA"], quality_rows)
     quality.column_dimensions["D"].width, quality.column_dimensions["E"].width = 55, 48
+    model_audit = make_sheet(
+        output,
+        "CONTROL EXTRACCION MODELOS",
+        ["ORIGEN", "FILA", "CODIGO", "DESCRIPCION ORIGINAL", "DESCRIPCION NORMALIZADA", "MODELO EXTRAIDO", "REGLA"],
+        model_audit_rows,
+    )
+    model_audit.column_dimensions["D"].width = 65
+    model_audit.column_dimensions["E"].width = 65
+    model_audit.column_dimensions["F"].width = 28
+    brand_audit = make_sheet(
+        output,
+        "CONTROL EXTRACCION MARCAS",
+        [
+            "ORIGEN", "FILA", "CODIGO", "DESCRIPCION ORIGINAL", "DESCRIPCION NORMALIZADA",
+            "MARCA ORIGINAL", "MARCA FINAL", "REGLA",
+        ],
+        brand_audit_rows,
+    )
+    brand_audit.column_dimensions["D"].width = 65
+    brand_audit.column_dimensions["E"].width = 65
+    brand_audit.column_dimensions["F"].width = 24
+    brand_audit.column_dimensions["G"].width = 24
+    brand_review = make_sheet(
+        output,
+        "CONTROL REVISION MARCAS",
+        ["ORIGEN", "FILA", "CODIGO", "DESCRIPCION", "MARCA ACTUAL", "MARCA SUGERIDA", "MOTIVO"],
+        brand_review_rows,
+    )
+    brand_review.column_dimensions["D"].width = 65
+    brand_review.column_dimensions["E"].width = 24
+    brand_review.column_dimensions["F"].width = 24
+    brand_review.column_dimensions["G"].width = 65
     make_sheet(output, "U M", ["UNIDAD DE MEDIDA", "ABREVIATURA"], units_glossary)
     make_sheet(output, "GRUPO", ["GRUPO"], groups_glossary)
     make_sheet(output, "FAMILIA", ["FAMILIA"], families_glossary)
@@ -583,6 +921,9 @@ def build_workbook(products_wb, products: list[ProductRow], lima_rows: list[Lima
         ["Clasificacion confianza media", sum(row.classification.confidence == "MEDIA" for row in lima_rows)],
         ["Clasificacion confianza baja", sum(row.classification.confidence == "BAJA" for row in lima_rows)],
         ["Incidencias de glosario en BD", len(quality_rows)],
+        ["Modelos extraidos de descripciones", len(model_audit_rows)],
+        ["Marcas extraidas o retiradas de descripciones", len(brand_audit_rows)],
+        ["Marcas pendientes de revision manual", len(brand_review_rows)],
         ["Estado", "LISTO PARA CARGA TECNICA; DATOS PENDIENTES SE COMPLETARAN DESPUES"],
     ]
     for unit, total in sorted(stock_summary(lima_rows, True).items()):

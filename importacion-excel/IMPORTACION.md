@@ -26,6 +26,19 @@ trazabilidad de la fusion.
 
 La fusion no incorpora precios ni valorizacion.
 
+Las descripciones que declaran un modelo mediante `MODELO`, `MOD.` o `MOD:`
+se normalizan durante la generacion. El modelo pasa a su columna propia y la
+descripcion conserva atributos que no pertenecen al modelo, como talla, color,
+certificacion, capacidad o presentacion. La hoja `CONTROL EXTRACCION MODELOS`
+registra el valor original, el resultado y la regla aplicada para su auditoria.
+
+Las marcas declaradas en las descripciones tambien pasan a la columna `MARCA`.
+La deteccion usa palabras completas, marcadores explicitos y alias revisados;
+no acepta coincidencias parciales como `ABLE` dentro de `CABLE` ni `HEX` dentro
+de `HEXAGONAL`. `CONTROL EXTRACCION MARCAS` registra todos los cambios aplicados.
+Las similitudes entre productos de una misma serie y las grafias ambiguas quedan
+en `CONTROL REVISION MARCAS` y no modifican automaticamente el maestro.
+
 ## Paso 1: crear un backup completo
 
 El respaldo de `inventario_db` debe incluir esquema y datos. No basta el archivo
@@ -125,3 +138,23 @@ El maestro actual contiene 3416 articulos, 16 unidades, 8 grupos, un almacen y
 
 La limpieza de metadatos de solicitudes no elimina automaticamente los archivos
 de prueba guardados en Nextcloud. Esos archivos se retiran por separado.
+
+## Actualizacion incremental de descripcion, marca y modelo
+
+Si el maestro de 3416 articulos ya fue importado, no se debe ejecutar nuevamente
+`009_reinicio_inventario_maestro.sql` ni `--importar`. Para aplicar solamente las
+normalizaciones auditadas, con la aplicacion detenida y despues de crear un
+backup completo:
+
+```powershell
+python .\actualizar_atributos_maestro.py --validar-bd
+python .\actualizar_atributos_maestro.py --aplicar
+python .\actualizar_atributos_maestro.py --validar-bd
+```
+
+El actualizador comprueba la estructura definida en `backupinventario.sql`, usa
+`inventario.codigo` como clave y conserva `id`, stock, clasificacion, unidad,
+ubicacion, condicion y calibracion. La version actual procesa 232 codigos: 169
+auditorias de modelo y 65 de marca, con dos codigos presentes en ambas hojas.
+Si detecta una descripcion, marca o modelo editados despues de la importacion,
+cancela y revierte toda la operacion.
