@@ -58,8 +58,12 @@ export const inventoryApi = {
   create: (body: unknown) => api<Inventario>('/inventario', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: unknown) => api<Inventario>(`/inventario/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   toggle: (id: number) => api<Inventario>(`/inventario/${id}/estado`, { method: 'PATCH' }),
-  exportExcel: async () => {
-    const response = await fetch('/api/inventario/exportar/excel')
+  exportExcel: async (params: Record<string, string | number> = {}) => {
+    const url = new URL('/api/inventario/exportar/excel', window.location.origin)
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== '') url.searchParams.set(key, String(value))
+    })
+    const response = await fetch(url)
     if (!response.ok) {
       let message = 'No se pudo exportar el inventario.'
       try {

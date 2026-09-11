@@ -380,6 +380,14 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .search-field span { position: absolute; left: 12px; top: 9px; color: #8396a1; font-size: 18px; }
 .search-field input { width: 100%; padding: 0 12px 0 36px; }
 input:focus, select:focus, textarea:focus { border-color: #4a9a98 !important; box-shadow: 0 0 0 3px rgba(31,143,135,.12); }
+.warehouse-tabs { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; padding: 10px 13px; overflow: hidden; }
+.warehouse-tabs-heading { display: grid; flex: 0 0 auto; gap: 1px; min-width: 145px; padding-right: 17px; border-right: 1px solid #dfe8eb; }
+.warehouse-tabs-heading small { color: #708590; font-size: 8px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.warehouse-tabs-heading strong { overflow: hidden; max-width: 210px; color: #294857; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.warehouse-tabs-scroll { display: flex; flex: 1; gap: 7px; min-width: 0; overflow-x: auto; padding: 2px 1px 4px; scrollbar-width: thin; }
+.warehouse-tabs-scroll button { flex: 0 0 auto; min-height: 34px; padding: 6px 14px; border: 1px solid #d1dee3; border-radius: 9px; color: #526a76; background: #fff; font-size: 10px; font-weight: 750; white-space: nowrap; }
+.warehouse-tabs-scroll button:hover { border-color: #73aaa5; color: #176f70; background: #f4faf9; }
+.warehouse-tabs-scroll button.active { border-color: #16847a; color: #fff; background: #16847a; box-shadow: 0 5px 14px rgba(22, 132, 122, .18); }
 .inventory-search-panel { display: grid; gap: 12px; margin-bottom: 12px; padding: 13px; }
 .inventory-search-row { display: grid; grid-template-columns: minmax(280px, 1fr) auto auto; gap: 9px; }
 .inventory-search-input { display: flex; align-items: center; min-width: 0; height: 42px; padding: 0 12px; border: 1px solid #cfdae0; border-radius: 9px; background: white; }
@@ -596,6 +604,11 @@ html[data-theme="dark"] .request-create-actions,
 html[data-theme="dark"] .request-review-actions { border-color: var(--line); background: #10161b; }
 html[data-theme="dark"] .modal-close { color: #bcc7cf; background: #1b252d; }
 html[data-theme="dark"] .inventory-search-panel { background: #0f151a; }
+html[data-theme="dark"] .warehouse-tabs-heading { border-color: #303942; }
+html[data-theme="dark"] .warehouse-tabs-heading strong { color: #e3e9ed; }
+html[data-theme="dark"] .warehouse-tabs-scroll button { color: #cbd5dc; border-color: #394650; background: #0d1419; }
+html[data-theme="dark"] .warehouse-tabs-scroll button:hover { color: #75c2fa; border-color: #2f6d9b; background: #14232e; }
+html[data-theme="dark"] .warehouse-tabs-scroll button.active { color: white; border-color: #1689e8; background: #0875cf; box-shadow: 0 5px 14px rgba(0, 117, 226, .2); }
 html[data-theme="dark"] .inventory-search-input { border-color: #48545e; background: #0b1014; }
 html[data-theme="dark"] .inventory-quick-filters { border-color: #303942; }
 html[data-theme="dark"] .inventory-quick-filters button { color: #d5dce1; border-color: transparent; background: transparent; }
@@ -678,6 +691,8 @@ html[data-theme="dark"] .notice-error { color: #ffabb0; border-color: #633238; b
   .settings-navigation button { flex: 0 0 170px; margin-bottom: 0; }
   .inventory-search-row { grid-template-columns: 1fr auto; }
   .inventory-search-input { grid-column: 1 / -1; }
+  .warehouse-tabs { align-items: stretch; flex-direction: column; gap: 9px; }
+  .warehouse-tabs-heading { min-width: 0; padding: 0 0 8px; border-right: 0; border-bottom: 1px solid #dfe8eb; }
   .inventory-table-toolbar { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 560px) {
@@ -686,6 +701,8 @@ html[data-theme="dark"] .notice-error { color: #ffabb0; border-color: #633238; b
   .filter-bar .search-field, .filter-actions { grid-column: 1; }
   .filter-actions .btn { flex: 1; }
   .page-heading-actions { flex-direction: column-reverse; }
+  .warehouse-tabs { margin-right: -15px; margin-left: -15px; border-right: 0; border-left: 0; border-radius: 0; }
+  .warehouse-tabs-scroll button { padding-right: 12px; padding-left: 12px; }
   .settings-content { padding: 15px; }
   .settings-navigation button { flex-basis: 145px; padding: 9px; }
   .settings-navigation-icon { display: none; }

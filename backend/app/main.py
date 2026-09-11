@@ -182,19 +182,15 @@ def dashboard(db: DB):
     )
 
 
-@app.get("/api/inventario", response_model=PaginatedInventario)
-def inventario_listar(
-    db: DB,
+def _filtros_inventario(
     q: str = "",
     grupo_id: int | None = None,
     familia_id: int | None = None,
     subfamilia_id: int | None = None,
+    almacen_id: int | None = None,
     ubicacion_id: int | None = None,
     estado: Literal["activos", "inactivos", "todos", "bajo"] = "activos",
     calibracion: Literal["", "NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] = "",
-    orden: Literal["desc", "asc"] = "desc",
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=5, le=500),
 ):
     filtros = []
     if q.strip():
@@ -223,6 +219,8 @@ def inventario_listar(
         filtros.append(Inventario.clasificacion.has(Clasificacion.familia_id == familia_id))
     if subfamilia_id:
         filtros.append(Inventario.clasificacion.has(Clasificacion.subfamilia_id == subfamilia_id))
+    if almacen_id:
+        filtros.append(Inventario.ubicacion.has(Ubicacion.almacen_id == almacen_id))
     if ubicacion_id:
         filtros.append(Inventario.ubicacion_id == ubicacion_id)
     if estado == "activos":
@@ -239,6 +237,28 @@ def inventario_listar(
         )
     if calibracion:
         filtros.append(Inventario.calibracion == calibracion)
+    return filtros
+
+
+@app.get("/api/inventario", response_model=PaginatedInventario)
+def inventario_listar(
+    db: DB,
+    q: str = "",
+    grupo_id: int | None = None,
+    familia_id: int | None = None,
+    subfamilia_id: int | None = None,
+    almacen_id: int | None = None,
+    ubicacion_id: int | None = None,
+    estado: Literal["activos", "inactivos", "todos", "bajo"] = "activos",
+    calibracion: Literal["", "NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] = "",
+    orden: Literal["desc", "asc"] = "desc",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=5, le=500),
+):
+    filtros = _filtros_inventario(
+        q, grupo_id, familia_id, subfamilia_id, almacen_id,
+        ubicacion_id, estado, calibracion,
+    )
 
     total = db.scalar(select(func.count()).select_from(Inventario).where(*filtros)) or 0
     criterio_id = Inventario.id.asc() if orden == "asc" else Inventario.id.desc()
@@ -259,10 +279,27 @@ def inventario_listar(
 
 
 @app.get("/api/inventario/exportar/excel")
-def inventario_exportar_excel(db: DB):
+def inventario_exportar_excel(
+    db: DB,
+    q: str = "",
+    grupo_id: int | None = None,
+    familia_id: int | None = None,
+    subfamilia_id: int | None = None,
+    almacen_id: int | None = None,
+    ubicacion_id: int | None = None,
+    estado: Literal["activos", "inactivos", "todos", "bajo"] = "activos",
+    calibracion: Literal["", "NO_CUMPLE", "SIN_CALIBRAR", "CALIBRADO"] = "",
+    orden: Literal["desc", "asc"] = "desc",
+):
+    filtros = _filtros_inventario(
+        q, grupo_id, familia_id, subfamilia_id, almacen_id,
+        ubicacion_id, estado, calibracion,
+    )
+    criterio_id = Inventario.id.asc() if orden == "asc" else Inventario.id.desc()
     items = db.scalars(
         select(Inventario)
-        .order_by(Inventario.id.asc())
+        .where(*filtros)
+        .order_by(criterio_id)
     ).unique().all()
     try:
         output = generar_inventario_excel(items)

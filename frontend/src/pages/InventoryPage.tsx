@@ -5,11 +5,11 @@ import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import { catalogsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
-import type { Catalogo, Clasificacion, Grupo, Inventario, Paginated, Ubicacion, Unidad } from '../types'
+import type { Almacen, Catalogo, Clasificacion, Grupo, Inventario, Paginated, Ubicacion, Unidad } from '../types'
 
 type Options = {
   grupos: Grupo[]; familias: Catalogo[]; subfamilias: Catalogo[]; clasificaciones: Clasificacion[]
-  unidades: Unidad[]; ubicaciones: Ubicacion[]; condiciones: Catalogo[]
+  unidades: Unidad[]; almacenes: Almacen[]; ubicaciones: Ubicacion[]; condiciones: Catalogo[]
 }
 type FormData = {
   codigo: string; descripcion: string; clasificacion_id: string; unidad_medida_id: string
@@ -41,7 +41,8 @@ function paginationItems(current: number, pages: number) {
 
 export function InventoryPage({ notify, readOnly = false }: { notify: (message: string, type?: 'success' | 'error') => void; readOnly?: boolean }) {
   const [data, setData] = useState<Paginated<Inventario> | null>(null)
-  const [options, setOptions] = useState<Options>({ grupos: [], familias: [], subfamilias: [], clasificaciones: [], unidades: [], ubicaciones: [], condiciones: [] })
+  const [options, setOptions] = useState<Options>({ grupos: [], familias: [], subfamilias: [], clasificaciones: [], unidades: [], almacenes: [], ubicaciones: [], condiciones: [] })
+  const [warehouseId, setWarehouseId] = useState('')
   const [filters, setFilters] = useState({ q: '', grupo_id: '', familia_id: '', subfamilia_id: '', ubicacion_id: '', estado: 'activos', calibracion: '', orden: 'desc' })
   const [applied, setApplied] = useState(filters)
   const [page, setPage] = useState(1)
@@ -60,15 +61,15 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [result, grupos, familias, subfamilias, clasificaciones, unidades, ubicaciones, condiciones] = await Promise.all([
-        inventoryApi.list({ ...applied, page, page_size: pageSize }),
+      const [result, grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones] = await Promise.all([
+        inventoryApi.list({ ...applied, almacen_id: warehouseId, page, page_size: pageSize }),
         catalogsApi.groups(), catalogsApi.families(), catalogsApi.subfamilies(), catalogsApi.classifications(),
-        catalogsApi.units(), catalogsApi.locations(), catalogsApi.conditions(),
+        catalogsApi.units(), catalogsApi.warehouses(), catalogsApi.locations(), catalogsApi.conditions(),
       ])
-      setData(result); setOptions({ grupos, familias, subfamilias, clasificaciones, unidades, ubicaciones, condiciones })
+      setData(result); setOptions({ grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones })
     } catch (err) { setError(err instanceof Error ? err.message : 'Error inesperado') }
     finally { setLoading(false) }
-  }, [applied, page, pageSize])
+  }, [applied, page, pageSize, warehouseId])
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     if (!inventoryMountedRef.current) {
@@ -90,6 +91,12 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     setApplied((current) => ({ ...current, orden }))
     setPage(1)
   }
+  const selectWarehouse = (id: string) => {
+    setWarehouseId(id)
+    setFilters((current) => ({ ...current, ubicacion_id: '' }))
+    setApplied((current) => ({ ...current, ubicacion_id: '' }))
+    setPage(1)
+  }
   const toggle = async () => {
     if (!statusPending) return
     setChangingStatus(true)
@@ -105,7 +112,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const exportExcel = async () => {
     setExporting(true)
     try {
-      const file = await inventoryApi.exportExcel()
+      const file = await inventoryApi.exportExcel({ ...applied, almacen_id: warehouseId })
       const url = URL.createObjectURL(file)
       const link = document.createElement('a')
       link.href = url
@@ -122,8 +129,20 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     }
   }
 
+  const activeWarehouse = options.almacenes.find((warehouse) => String(warehouse.id) === warehouseId)
+  const visibleLocations = warehouseId
+    ? options.ubicaciones.filter((location) => String(location.almacen.id) === warehouseId)
+    : options.ubicaciones
+
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Almacén Lima</p><h1>Inventario</h1><p>{readOnly ? 'Consulta los artículos registrados en modo de solo lectura.' : 'Consulta y administra los artículos registrados.'}</p></div><div className="page-heading-actions"><button type="button" className="btn btn-secondary" onClick={() => void exportExcel()} disabled={exporting}><FileDownloadOutlinedIcon /> {exporting ? 'Preparando…' : 'Exportar Excel'}</button>{!readOnly && <button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button>}</div></div>
+    <div className="page-heading"><div><p className="eyebrow">{activeWarehouse?.nombre ?? 'Inventario corporativo'}</p><h1>Inventario</h1><p>{readOnly ? 'Consulta los artículos registrados en modo de solo lectura.' : 'Consulta y administra los artículos registrados.'}</p></div><div className="page-heading-actions"><button type="button" className="btn btn-secondary" onClick={() => void exportExcel()} disabled={exporting}><FileDownloadOutlinedIcon /> {exporting ? 'Preparando…' : 'Exportar Excel'}</button>{!readOnly && <button className="btn btn-primary" onClick={() => setEditing('new')}>＋ Nuevo artículo</button>}</div></div>
+    <nav className="warehouse-tabs card" aria-label="Inventario por almacén">
+      <div className="warehouse-tabs-heading"><small>Inventario por almacén</small><strong>{activeWarehouse?.nombre ?? 'Todos los almacenes'}</strong></div>
+      <div className="warehouse-tabs-scroll">
+        <button type="button" className={!warehouseId ? 'active' : ''} aria-pressed={!warehouseId} onClick={() => selectWarehouse('')}>Todos</button>
+        {options.almacenes.map((warehouse) => <button type="button" key={warehouse.id} className={warehouseId === String(warehouse.id) ? 'active' : ''} aria-pressed={warehouseId === String(warehouse.id)} onClick={() => selectWarehouse(String(warehouse.id))}>{warehouse.nombre}</button>)}
+      </div>
+    </nav>
     <form className="inventory-search-panel card" onSubmit={search}>
       <div className="inventory-search-row">
         <label className="inventory-search-input"><SearchIcon /><input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Buscar por código, descripción, marca, modelo o serie" /></label>
@@ -141,7 +160,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
         <label><span>Grupo</span><select value={filters.grupo_id} onChange={(e) => setFilters({ ...filters, grupo_id: e.target.value })}><option value="">Todos los grupos</option>{options.grupos.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select></label>
         <label><span>Familia</span><select value={filters.familia_id} onChange={(e) => setFilters({ ...filters, familia_id: e.target.value })}><option value="">Todas las familias</option>{options.familias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select></label>
         <label><span>Subfamilia</span><select value={filters.subfamilia_id} onChange={(e) => setFilters({ ...filters, subfamilia_id: e.target.value })}><option value="">Todas las subfamilias</option>{options.subfamilias.map((item) => <option value={item.id} key={item.id}>{item.nombre}</option>)}</select></label>
-        <label><span>Ubicación</span><select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{options.ubicaciones.map((item) => <option value={item.id} key={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></label>
+        <label><span>Ubicación</span><select value={filters.ubicacion_id} onChange={(e) => setFilters({ ...filters, ubicacion_id: e.target.value })}><option value="">Todas las ubicaciones</option>{visibleLocations.map((item) => <option value={item.id} key={item.id}>{item.codigo} · {item.almacen.nombre}</option>)}</select></label>
         <label><span>Estado</span><select value={filters.estado} onChange={(e) => setFilters({ ...filters, estado: e.target.value })}><option value="activos">Activos</option><option value="bajo">Stock bajo</option><option value="inactivos">Inactivos</option><option value="todos">Todos</option></select></label>
         <label><span>Calibración</span><select value={filters.calibracion} onChange={(e) => setFilters({ ...filters, calibracion: e.target.value })}><option value="">Todos</option><option value="NO_CUMPLE">No aplica</option><option value="SIN_CALIBRAR">Sin calibrar</option><option value="CALIBRADO">Calibrado</option></select></label>
         <div className="filter-actions"><button className="btn btn-primary">Aplicar</button><button type="button" className="btn btn-secondary" onClick={clear}>Limpiar</button></div>
