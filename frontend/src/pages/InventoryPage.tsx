@@ -1,8 +1,10 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { catalogsApi, inventoryApi } from '../api'
 import { EmptyState, ErrorNotice, formatDate, formatNumber, Loader, Modal } from '../components'
 import type { Almacen, Catalogo, Clasificacion, Grupo, Inventario, Paginated, Ubicacion, Unidad } from '../types'
@@ -27,6 +29,13 @@ const emptyForm: FormData = {
 }
 
 const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
+const INVENTORY_ACTOR = 'Logística Lima · Simulación'
+
+type PendingInventoryDocument = {
+  id: string
+  file: File
+  descripcion: string
+}
 
 function paginationItems(current: number, pages: number) {
   const visible = new Set([1, pages, current - 1, current, current + 1])
@@ -307,6 +316,18 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
         </div>
       </section>
 
+      <section className="inventory-detail-section">
+        <h3>Documentos adjuntos</h3>
+        {item.archivos.length ? <div className="inventory-document-grid">{item.archivos.map((file) => {
+          const url = inventoryApi.fileUrl(item.id, file.id)
+          return <article className="inventory-document-card" key={file.id}>
+            <span className="inventory-document-icon"><PictureAsPdfOutlinedIcon /></span>
+            <div><strong>{file.descripcion}</strong><small>{file.nombre_original}</small><small>{formatDate(file.creado_en, true)} · {(file.tamano_bytes / 1024).toFixed(1)} KB</small></div>
+            <a href={url} target="_blank" rel="noreferrer" aria-label={`Ver ${file.nombre_original}`}><VisibilityOutlinedIcon /> Ver PDF</a>
+          </article>
+        })}</div> : <p className="inventory-documents-empty">Este artículo no tiene documentos adjuntos.</p>}
+      </section>
+
       <div className="request-detail-actions">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
         {!readOnly && <button type="button" className="btn btn-primary" onClick={onEdit}>Editar artículo</button>}
@@ -328,7 +349,10 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     marca: item.marca ?? '', modelo: item.modelo ?? '', numero_serie: item.numero_serie ?? '',
     codigo_patrimonial: item.codigo_patrimonial ?? '', observaciones: item.observaciones ?? '', activo: item.activo,
   } : emptyForm)
+  const [persistedItem, setPersistedItem] = useState<Inventario | null>(item)
+  const [documents, setDocuments] = useState<PendingInventoryDocument[]>([])
   const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const selectedClassification = options.clasificaciones.find((x) => x.id === Number(form.clasificacion_id))
   const isEquipment = selectedClassification ? ['EQUIPO', 'EQUIPO DE COMPUTO', 'ACTIVO', 'MAQ EQP PESADO'].includes(selectedClassification.grupo.nombre.trim().toUpperCase()) : false
@@ -338,8 +362,32 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     }
   }, [item, selectedClassification?.id, selectedClassification?.grupo_id])
   const update = (key: keyof FormData, value: string | boolean) => setForm({ ...form, [key]: value })
+  const addDocuments = (files: FileList | null) => {
+    const selected = Array.from(files ?? []).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
+    setDocuments((current) => [
+      ...current,
+      ...selected.slice(0, Math.max(0, 10 - (current.length + (persistedItem?.archivos.length ?? 0)))).map((file, index) => ({
+        id: `${file.name}-${file.lastModified}-${index}-${Date.now()}`,
+        file,
+        descripcion: '',
+      })),
+    ])
+  }
+  const updateDocumentDescription = (id: string, descripcion: string) => setDocuments((current) => current.map((document) => document.id === id ? { ...document, descripcion } : document))
+  const removeDocument = (id: string) => setDocuments((current) => current.filter((document) => document.id !== id))
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setSaving(true); setError('')
+    event.preventDefault(); setError('')
+    const invalidDocument = documents.find((document) => document.descripcion.trim().length < 2)
+    if (invalidDocument) {
+      setError(`Describe el documento ${invalidDocument.file.name} antes de guardar.`)
+      return
+    }
+    const oversizedDocument = documents.find((document) => document.file.size > 20 * 1024 * 1024)
+    if (oversizedDocument) {
+      setError(`El documento ${oversizedDocument.file.name} supera el máximo de 20 MB.`)
+      return
+    }
+    setSaving(true)
     const payload = {
       ...form, clasificacion_id: Number(form.clasificacion_id), unidad_medida_id: Number(form.unidad_medida_id), ubicacion_id: form.ubicacion_id ? Number(form.ubicacion_id) : null,
       condicion_id: form.condicion_id ? Number(form.condicion_id) : null, stock_actual: form.stock_actual || '0', stock_minimo: form.stock_minimo || null,
@@ -349,9 +397,22 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       numero_serie: form.numero_serie.trim() || null, codigo_patrimonial: form.codigo_patrimonial.trim() || null,
       observaciones: form.observaciones.trim() || null,
     }
-    try { item ? await inventoryApi.update(item.id, payload) : await inventoryApi.create(payload); await onSaved(`Artículo ${form.codigo} ${item ? 'actualizado' : 'creado'} correctamente.`) }
+    try {
+      setProgress(persistedItem ? 'Actualizando artículo…' : 'Creando artículo…')
+      const savedItem = persistedItem
+        ? await inventoryApi.update(persistedItem.id, payload)
+        : await inventoryApi.create(payload)
+      setPersistedItem(savedItem)
+      for (const [index, document] of [...documents].entries()) {
+        setProgress(`Subiendo PDF ${index + 1} de ${documents.length}…`)
+        const uploaded = await inventoryApi.uploadFile(savedItem.id, document.file, document.descripcion.trim(), INVENTORY_ACTOR)
+        setPersistedItem((current) => current ? { ...current, archivos: [...current.archivos, uploaded] } : current)
+        setDocuments((current) => current.filter((candidate) => candidate.id !== document.id))
+      }
+      await onSaved(`Artículo ${form.codigo} ${item ? 'actualizado' : 'creado'} correctamente.`)
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'No se pudo guardar.') }
-    finally { setSaving(false) }
+    finally { setSaving(false); setProgress('') }
   }
   return <Modal wide title={item ? `Editar ${item.codigo}` : 'Nuevo artículo'} subtitle="Completa la información principal del inventario." onClose={onClose}>
     {error && <ErrorNotice message={error} />}
@@ -377,9 +438,19 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
           <div className="equipment-identity-grid"><Field label="Marca"><input value={form.marca} onChange={(e) => update('marca', e.target.value)} /></Field><Field label="Modelo"><input value={form.modelo} onChange={(e) => update('modelo', e.target.value)} /></Field><Field label="Número de serie"><input value={form.numero_serie} onChange={(e) => update('numero_serie', e.target.value)} /></Field><Field label="Código patrimonial"><input value={form.codigo_patrimonial} onChange={(e) => update('codigo_patrimonial', e.target.value)} /></Field></div>
         </> : <p>No requiere calibración para el grupo seleccionado.</p>}
       </section>
+      <section className="inventory-documents-editor span-3">
+        <div className="inventory-documents-heading"><div><strong>Documentos del artículo</strong><small>Adjunta hasta 10 archivos PDF de 20 MB y describe brevemente cada uno.</small></div><span>{(persistedItem?.archivos.length ?? 0) + documents.length}/10</span></div>
+        <label className="file-drop inventory-document-picker"><span>Seleccionar documentos PDF</span><small>El contenido se guardará de forma privada en Nextcloud.</small><input type="file" accept="application/pdf,.pdf" multiple disabled={saving || (persistedItem?.archivos.length ?? 0) + documents.length >= 10} onChange={(event) => { addDocuments(event.target.files); event.currentTarget.value = '' }} /></label>
+        {!!persistedItem?.archivos.length && <div className="inventory-existing-documents">{persistedItem.archivos.map((document) => <a key={document.id} href={inventoryApi.fileUrl(persistedItem.id, document.id)} target="_blank" rel="noreferrer"><PictureAsPdfOutlinedIcon /><span><strong>{document.descripcion}</strong><small>{document.nombre_original}</small></span><VisibilityOutlinedIcon /></a>)}</div>}
+        {!!documents.length && <div className="inventory-pending-documents">{documents.map((document) => <div key={document.id}>
+          <span className="inventory-document-icon"><PictureAsPdfOutlinedIcon /></span>
+          <div><strong>{document.file.name}</strong><small>{(document.file.size / 1024).toFixed(1)} KB</small><input value={document.descripcion} maxLength={500} onChange={(event) => updateDocumentDescription(document.id, event.target.value)} placeholder="Descripción del documento, por ejemplo: certificado de calibración 2026" required /></div>
+          <button type="button" onClick={() => removeDocument(document.id)} disabled={saving} aria-label={`Quitar ${document.file.name}`}>×</button>
+        </div>)}</div>}
+      </section>
       <Field label="Observaciones" className="span-3"><textarea rows={3} value={form.observaciones} onChange={(e) => update('observaciones', e.target.value)} /></Field>
       <label className="check-field span-3"><input type="checkbox" checked={form.activo} onChange={(e) => update('activo', e.target.checked)} /><span>Artículo activo</span></label>
-      <div className="form-actions span-3"><button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Guardar artículo'}</button></div>
+      <div className="form-actions span-3"><button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button><button className="btn btn-primary" disabled={saving}>{saving ? progress || 'Guardando…' : 'Guardar artículo'}</button></div>
     </form>
   </Modal>
 }

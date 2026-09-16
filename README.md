@@ -22,7 +22,7 @@ La aplicación permite:
 - Vincular artículos desde Mina, proyectar el nuevo stock y valorizar la recepción con costo promedio.
 - No aprobar solicitudes indicando un motivo visible para Mina y conservado en el historial.
 - Conservar marca, modelo, serie, código patrimonial, condición y calibración.
-- Adjuntar PDF y firmas PNG a las solicitudes usando almacenamiento privado en Nextcloud.
+- Adjuntar PDF a los artículos, y PDF y firmas PNG a las solicitudes, usando almacenamiento privado en Nextcloud.
 - Firmar desde la misma página con mouse, lápiz o pantalla táctil.
 
 ## Migraciones
@@ -50,6 +50,16 @@ La migración `007` agrega el estado `RECHAZADO` y conserva el motivo, responsab
 y fecha de las solicitudes que Logística decide no aprobar.
 La migración `008` permite proponer la vinculación desde Mina, guardar el costo
 declarado y conservar los costos anterior, de ingreso y posterior en movimientos.
+
+Después de aplicar la estructura maestra `009`, los documentos PDF de los
+artículos requieren:
+
+```text
+importacion-excel/010_archivos_inventario.sql
+```
+
+La migración `010` conserva en PostgreSQL la descripción y metadatos del PDF;
+el contenido privado permanece almacenado en Nextcloud.
 
 ## Importante sobre seguridad
 

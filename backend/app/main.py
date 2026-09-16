@@ -24,6 +24,7 @@ from .models import (
     Familia,
     Grupo,
     Inventario,
+    InventarioArchivo,
     Movimiento,
     SolicitudEquipo,
     SolicitudEquipoArchivo,
@@ -45,6 +46,7 @@ from .schemas import (
     GrupoCreate,
     GrupoOut,
     InventarioCreate,
+    InventarioArchivoOut,
     InventarioOut,
     InventarioUpdate,
     MovimientoCreate,
@@ -377,6 +379,123 @@ def inventario_estado(pk: int, db: DB):
     db.commit()
     db.refresh(registro)
     return registro
+
+
+def _archivo_inventario(db: Session, inventario_id: int, archivo_id: int):
+    archivo = db.scalar(
+        select(InventarioArchivo).where(
+            InventarioArchivo.id == archivo_id,
+            InventarioArchivo.inventario_id == inventario_id,
+            InventarioArchivo.eliminado_en.is_(None),
+        )
+    )
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    return archivo
+
+
+@app.post(
+    "/api/inventario/{pk}/archivos",
+    response_model=InventarioArchivoOut,
+    status_code=201,
+)
+async def inventario_archivo_subir(
+    pk: int,
+    db: DB,
+    descripcion: Annotated[str, Form(min_length=2, max_length=500)],
+    subido_por_nombre: Annotated[str, Form(min_length=1, max_length=150)],
+    archivo: UploadFile = File(...),
+):
+    inventario = _obtener(db, Inventario, pk, "Artículo")
+    descripcion_limpia = " ".join(descripcion.split())
+    if len(descripcion_limpia) < 2:
+        raise HTTPException(status_code=400, detail="Indique la descripción del documento.")
+
+    activos = [item for item in inventario.archivos_registros if item.eliminado_en is None]
+    if len(activos) >= 10:
+        raise HTTPException(status_code=409, detail="El artículo ya tiene 10 documentos activos.")
+
+    nombre_original = (archivo.filename or "documento.pdf").replace("\\", "/").split("/")[-1][:255]
+    contenido = await archivo.read(20 * 1024 * 1024 + 1)
+    await archivo.close()
+    if not contenido:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    if len(contenido) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="El PDF supera el máximo de 20 MB.")
+    if not contenido.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="El contenido no corresponde a un PDF válido.")
+
+    identificador = uuid4().hex
+    nombre_almacenado = f"{identificador}.pdf"
+    ruta = f"inventario/{inventario.id}/documentos/{nombre_almacenado}"
+    try:
+        remoto = storage.upload(ruta, contenido, "application/pdf")
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    registro = InventarioArchivo(
+        inventario_id=inventario.id,
+        descripcion=descripcion_limpia,
+        nombre_original=nombre_original,
+        nombre_almacenado=nombre_almacenado,
+        ruta_remota=ruta,
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
+        sha256=sha256(contenido).hexdigest(),
+        nextcloud_file_id=remoto["file_id"],
+        nextcloud_etag=remoto["etag"],
+        subido_por_nombre=subido_por_nombre.strip(),
+    )
+    db.add(registro)
+    try:
+        db.commit()
+        db.refresh(registro)
+    except IntegrityError as exc:
+        db.rollback()
+        try:
+            storage.delete(ruta)
+        except NextcloudError:
+            pass
+        _error_integridad(exc)
+    return registro
+
+
+@app.get("/api/inventario/{pk}/archivos/{archivo_id}")
+def inventario_archivo_descargar(pk: int, archivo_id: int, db: DB):
+    _obtener(db, Inventario, pk, "Artículo")
+    archivo = _archivo_inventario(db, pk, archivo_id)
+    try:
+        contenido = storage.download(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    nombre = quote(archivo.nombre_original)
+    return Response(
+        content=contenido,
+        media_type=archivo.mime_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{nombre}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.delete("/api/inventario/{pk}/archivos/{archivo_id}", status_code=204)
+def inventario_archivo_eliminar(
+    pk: int,
+    archivo_id: int,
+    eliminado_por_nombre: str,
+    db: DB,
+):
+    _obtener(db, Inventario, pk, "Artículo")
+    archivo = _archivo_inventario(db, pk, archivo_id)
+    try:
+        storage.delete(archivo.ruta_remota)
+    except NextcloudError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    archivo.eliminado_en = datetime.now(timezone.utc)
+    archivo.eliminado_por_nombre = eliminado_por_nombre.strip()[:150]
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/api/movimientos", response_model=PaginatedMovimientos)

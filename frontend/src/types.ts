@@ -35,6 +35,17 @@ export type Ubicacion = {
   almacen: Almacen
 }
 
+export type InventarioArchivo = {
+  id: number
+  descripcion: string
+  nombre_original: string
+  mime_type: string
+  tamano_bytes: number
+  sha256: string
+  subido_por_nombre: string
+  creado_en: string
+}
+
 export type TipoMovimiento = {
   id: number
   codigo: string
@@ -69,6 +80,7 @@ export type Inventario = {
   unidad_medida: Unidad
   ubicacion: Ubicacion | null
   condicion: Catalogo | null
+  archivos: InventarioArchivo[]
 }
 
 export type Movimiento = {

@@ -61,6 +61,17 @@ class TipoMovimientoOut(ORMModel):
     activo: bool
 
 
+class InventarioArchivoOut(ORMModel):
+    id: int
+    descripcion: str
+    nombre_original: str
+    mime_type: str
+    tamano_bytes: int
+    sha256: str
+    subido_por_nombre: str
+    creado_en: datetime
+
+
 class InventarioOut(ORMModel):
     id: int
     codigo: str
@@ -85,6 +96,7 @@ class InventarioOut(ORMModel):
     unidad_medida: UnidadOut
     ubicacion: UbicacionOut | None
     condicion: CatalogoBase | None
+    archivos: list[InventarioArchivoOut] = Field(default_factory=list)
 
 
 class InventarioCreate(BaseModel):

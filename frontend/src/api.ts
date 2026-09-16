@@ -4,6 +4,7 @@ import type {
   Clasificacion,
   Dashboard,
   Inventario,
+  InventarioArchivo,
   Grupo,
   Movimiento,
   Paginated,
@@ -58,6 +59,15 @@ export const inventoryApi = {
   create: (body: unknown) => api<Inventario>('/inventario', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: unknown) => api<Inventario>(`/inventario/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   toggle: (id: number) => api<Inventario>(`/inventario/${id}/estado`, { method: 'PATCH' }),
+  uploadFile: (id: number, file: File, description: string, actor: string) => {
+    const body = new FormData()
+    body.append('descripcion', description)
+    body.append('subido_por_nombre', actor)
+    body.append('archivo', file)
+    return api<InventarioArchivo>(`/inventario/${id}/archivos`, { method: 'POST', body })
+  },
+  deleteFile: (id: number, fileId: number, actor: string) => api<void>(`/inventario/${id}/archivos/${fileId}`, { method: 'DELETE', params: { eliminado_por_nombre: actor } }),
+  fileUrl: (id: number, fileId: number) => `/api/inventario/${id}/archivos/${fileId}`,
   exportExcel: async (params: Record<string, string | number> = {}) => {
     const url = new URL('/api/inventario/exportar/excel', window.location.origin)
     Object.entries(params).forEach(([key, value]) => {

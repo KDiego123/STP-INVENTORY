@@ -75,6 +75,12 @@ ejecutar completo:
 009_reinicio_inventario_maestro.sql
 ```
 
+Las ampliaciones posteriores se ejecutan después de `009`, en orden:
+
+```text
+010_archivos_inventario.sql
+```
+
 Este SQL elimina los datos operativos de prueba, unidades, condiciones,
 ubicaciones y almacenes. Conserva tipos de movimiento, usuarios compartidos,
 roles, FDW, `auth_shared` y configuracion externa de Nextcloud.
