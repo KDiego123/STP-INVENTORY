@@ -24,6 +24,7 @@ La aplicación permite:
 - Conservar marca, modelo, serie, código patrimonial, condición y calibración.
 - Adjuntar PDF a los artículos, y PDF y firmas PNG a las solicitudes, usando almacenamiento privado en Nextcloud.
 - Firmar desde la misma página con mouse, lápiz o pantalla táctil.
+- Eliminar definitivamente artículos inactivos que no tengan movimientos ni solicitudes vinculadas.
 
 ## Migraciones
 

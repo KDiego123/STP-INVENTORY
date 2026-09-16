@@ -67,6 +67,8 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const [editing, setEditing] = useState<Inventario | 'new' | null>(null)
   const [statusPending, setStatusPending] = useState<Inventario | null>(null)
   const [changingStatus, setChangingStatus] = useState(false)
+  const [deletePending, setDeletePending] = useState<Inventario | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -122,6 +124,18 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
     }
     catch (err) { notify(err instanceof Error ? err.message : 'No se pudo cambiar el estado.', 'error') }
     finally { setChangingStatus(false) }
+  }
+  const remove = async () => {
+    if (!deletePending) return
+    setDeleting(true)
+    try {
+      await inventoryApi.remove(deletePending.id)
+      notify(`Artículo ${deletePending.codigo} eliminado definitivamente.`)
+      setDeletePending(null)
+      await load()
+    }
+    catch (err) { notify(err instanceof Error ? err.message : 'No se pudo eliminar el artículo.', 'error') }
+    finally { setDeleting(false) }
   }
   const exportExcel = async () => {
     setExporting(true)
@@ -207,7 +221,7 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
             <td>{item.condicion?.nombre ?? '—'}</td>
             <td>{item.calibracion ? <span className={`badge calibration-${item.calibracion.toLowerCase()}`}>{calibrationLabels[item.calibracion]}</span> : '—'}</td>
             <td><span className={`badge ${item.activo ? 'badge-success' : 'badge-neutral'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
-            {!readOnly && <td className="row-actions inventory-actions-cell"><div className="inventory-row-actions"><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button></div></td>}
+            {!readOnly && <td className="row-actions inventory-actions-cell"><div className={`inventory-row-actions ${!item.activo ? 'has-delete' : ''}`}><button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setStatusPending(item) }}>{item.activo ? 'Desactivar' : 'Activar'}</button>{!item.activo && <button className="btn btn-ghost btn-sm inventory-delete-action" onClick={(event) => { event.stopPropagation(); setDeletePending(item) }}>Eliminar</button>}</div></td>}
             <td className="inventory-detail-chevron"><KeyboardArrowRightIcon /></td>
           </tr>})}</tbody></table>{!data?.items.length && <EmptyState title="No encontramos artículos" text="Cambia los filtros o registra un artículo nuevo." />}</div>
       {data && <div className="pagination inventory-sticky-pagination">
@@ -226,6 +240,12 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
       saving={changingStatus}
       onClose={() => !changingStatus && setStatusPending(null)}
       onConfirm={() => void toggle()}
+    />}
+    {deletePending && <InventoryDeleteConfirmation
+      item={deletePending}
+      saving={deleting}
+      onClose={() => !deleting && setDeletePending(null)}
+      onConfirm={() => void remove()}
     />}
     {editing && <InventoryForm item={editing === 'new' ? null : editing} options={options} onClose={() => setEditing(null)} onSaved={async (message) => { setEditing(null); notify(message); await load() }} />}
   </>
@@ -246,7 +266,7 @@ function InventoryStatusConfirmation({ item, saving, onClose, onConfirm }: {
   >
     {deactivating ? <div className="inventory-status-notice">
       <span aria-hidden="true">i</span>
-      <p><strong>No se eliminará.</strong> Sus datos y movimientos se conservarán; podrás reactivarlo desde “Inactivos” o “Todos”.</p>
+      <p><strong>No se eliminará.</strong> Podrás reactivarlo o solicitar su eliminación definitiva desde “Inactivos” o “Todos”.</p>
     </div> : <div className="inventory-status-notice activate">
       <span aria-hidden="true">i</span>
       <p>Volverá al inventario activo sin perder datos ni movimientos anteriores.</p>
@@ -256,6 +276,32 @@ function InventoryStatusConfirmation({ item, saving, onClose, onConfirm }: {
       <button type="button" className={`btn ${deactivating ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={saving}>
         {saving ? 'Procesando…' : deactivating ? 'Sí, desactivar' : 'Sí, activar'}
       </button>
+    </div>
+  </Modal>
+}
+
+function InventoryDeleteConfirmation({ item, saving, onClose, onConfirm }: {
+  item: Inventario
+  saving: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [confirmation, setConfirmation] = useState('')
+  const confirmed = confirmation.trim().toUpperCase() === item.codigo.toUpperCase()
+  return <Modal
+    title={`Eliminar definitivamente ${item.codigo}`}
+    subtitle={item.descripcion}
+    onClose={onClose}
+    compact
+  >
+    <div className="inventory-delete-notice">
+      <span aria-hidden="true">!</span>
+      <div><strong>Esta acción no se puede deshacer.</strong><p>Se eliminarán el artículo y sus PDF. Si tiene movimientos o solicitudes vinculadas, se conservará inactivo para proteger el historial.</p></div>
+    </div>
+    <label className="field inventory-delete-confirmation"><span>Escribe <b>{item.codigo}</b> para confirmar</span><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" autoFocus disabled={saving} /></label>
+    <div className="form-actions">
+      <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
+      <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={saving || !confirmed}>{saving ? 'Eliminando…' : 'Eliminar definitivamente'}</button>
     </div>
   </Modal>
 }

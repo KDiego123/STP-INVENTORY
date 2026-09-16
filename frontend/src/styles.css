@@ -338,6 +338,12 @@ main { padding: 30px; max-width: 1580px; margin: 0 auto; }
 .inventory-status-notice > span { display: grid; place-items: center; flex: 0 0 19px; width: 19px; height: 19px; border-radius: 50%; color: white; background: #bd4147; font-size: 10px; font-weight: 800; }
 .inventory-status-notice.activate > span { background: #26806a; }
 .inventory-status-notice p { margin: 1px 0 0; font-size: 11px; line-height: 1.45; }
+.inventory-delete-notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #efc9cc; border-radius: 9px; color: #7e3035; background: #fdf0f1; }
+.inventory-delete-notice > span { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; color: white; background: #bd4147; font-size: 11px; font-weight: 900; }
+.inventory-delete-notice div { display: grid; gap: 3px; }
+.inventory-delete-notice strong { font-size: 12px; }
+.inventory-delete-notice p { margin: 0; font-size: 10px; line-height: 1.5; }
+.inventory-delete-confirmation { margin-top: 13px; }
 .approval-confirmation { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
 .approval-confirmation-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; color: white; background: linear-gradient(145deg, #198f88, #116e72); box-shadow: 0 8px 20px rgba(20, 124, 120, .22); font-size: 23px; font-weight: 800; }
 .approval-confirmation h3 { margin: 10px 0 5px; color: #183d55; font-size: 17px; }
@@ -464,8 +470,10 @@ tbody tr:hover { background: #fafcfd; }
 .calibration-calibrado { color: #187259; background: #e5f5ee; }.calibration-sin_calibrar { color: #a73138; background: #fbe7e9; }.calibration-no_cumple { color: #687983; background: #edf1f3; }
 .text-danger { color: var(--danger) !important; }
 .row-actions { white-space: nowrap; text-align: right; }
-.inventory-row-actions { display: grid; grid-template-columns: 82px; justify-content: end; }
+.inventory-row-actions { display: grid; grid-template-columns: 82px; justify-content: center; gap: 3px; }
+.inventory-row-actions.has-delete { grid-template-columns: repeat(2, 72px); }
 .inventory-row-actions .btn { width: 100%; }
+.inventory-delete-action { color: var(--danger); }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; color: var(--muted); font-size: 11px; }
 .pagination > div { display: flex; gap: 7px; }
 

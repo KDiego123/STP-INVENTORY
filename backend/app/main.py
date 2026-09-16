@@ -391,6 +391,58 @@ def inventario_estado(pk: int, db: DB):
     return registro
 
 
+@app.delete("/api/inventario/{pk}", status_code=204)
+def inventario_eliminar(pk: int, db: DB):
+    registro = _obtener(db, Inventario, pk, "Artículo")
+    if registro.activo:
+        raise HTTPException(
+            status_code=409,
+            detail="Primero desactive el artículo para poder eliminarlo definitivamente.",
+        )
+
+    movimientos = db.scalar(
+        select(func.count()).select_from(Movimiento).where(Movimiento.inventario_id == pk)
+    ) or 0
+    solicitudes = db.scalar(
+        select(func.count())
+        .select_from(SolicitudEquipoDetalle)
+        .where(SolicitudEquipoDetalle.inventario_id == pk)
+    ) or 0
+    if movimientos or solicitudes:
+        relaciones = []
+        if movimientos:
+            relaciones.append(f"{movimientos} movimiento(s)")
+        if solicitudes:
+            relaciones.append(f"{solicitudes} solicitud(es)")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede eliminar definitivamente porque el artículo conserva "
+                f"historial en {' y '.join(relaciones)}. Manténgalo inactivo para preservar la trazabilidad."
+            ),
+        )
+
+    for archivo in registro.archivos_registros:
+        try:
+            storage.delete(archivo.ruta_remota)
+        except NextcloudError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo eliminar uno de los documentos en Nextcloud. El artículo no fue borrado.",
+            ) from exc
+
+    db.delete(registro)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="El artículo está relacionado con otros registros y no puede eliminarse.",
+        ) from exc
+    return Response(status_code=204)
+
+
 def _archivo_inventario(db: Session, inventario_id: int, archivo_id: int):
     archivo = db.scalar(
         select(InventarioArchivo).where(

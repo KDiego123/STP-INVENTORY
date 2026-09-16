@@ -59,6 +59,7 @@ export const inventoryApi = {
   create: (body: unknown) => api<Inventario>('/inventario', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: unknown) => api<Inventario>(`/inventario/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   toggle: (id: number) => api<Inventario>(`/inventario/${id}/estado`, { method: 'PATCH' }),
+  remove: (id: number) => api<void>(`/inventario/${id}`, { method: 'DELETE' }),
   uploadFile: (id: number, file: File, description: string, actor: string) => {
     const body = new FormData()
     body.append('descripcion', description)
