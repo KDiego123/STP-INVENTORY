@@ -51,15 +51,19 @@ y fecha de las solicitudes que Logística decide no aprobar.
 La migración `008` permite proponer la vinculación desde Mina, guardar el costo
 declarado y conservar los costos anterior, de ingreso y posterior en movimientos.
 
-Después de aplicar la estructura maestra `009`, los documentos PDF de los
-artículos requieren:
+Después de aplicar la estructura maestra `009`, los documentos PDF y la
+modalidad opcional de almacenamiento de los artículos requieren:
 
 ```text
 importacion-excel/010_archivos_inventario.sql
+importacion-excel/011_modalidad_almacenamiento.sql
 ```
 
 La migración `010` conserva en PostgreSQL la descripción y metadatos del PDF;
 el contenido privado permanece almacenado en Nextcloud.
+La migración `011` agrega el catálogo editable de modalidades y permite indicar
+una referencia física opcional, como `CAJA-015`, sin cambiar la ubicación ni el
+almacén principal del artículo.
 
 ## Importante sobre seguridad
 

@@ -80,6 +80,9 @@ class InventarioOut(ORMModel):
     unidad_medida_id: int
     ubicacion_id: int | None
     condicion_id: int | None
+    modalidad_almacenamiento_id: int | None
+    referencia_almacenamiento: str | None
+    detalle_almacenamiento: str | None
     stock_actual: Decimal
     stock_minimo: Decimal | None
     fecha_ultima_entrada: date | None
@@ -96,6 +99,7 @@ class InventarioOut(ORMModel):
     unidad_medida: UnidadOut
     ubicacion: UbicacionOut | None
     condicion: CatalogoBase | None
+    modalidad_almacenamiento: CatalogoBase | None
     archivos: list[InventarioArchivoOut] = Field(default_factory=list)
 
 
@@ -106,6 +110,9 @@ class InventarioCreate(BaseModel):
     unidad_medida_id: int
     ubicacion_id: int | None = None
     condicion_id: int | None = None
+    modalidad_almacenamiento_id: int | None = None
+    referencia_almacenamiento: str | None = Field(default=None, max_length=100)
+    detalle_almacenamiento: str | None = None
     stock_actual: Decimal = Field(default=0, ge=0, decimal_places=3)
     stock_minimo: Decimal | None = Field(default=None, ge=0, decimal_places=3)
     fecha_ultima_entrada: date | None = None
@@ -128,6 +135,19 @@ class InventarioCreate(BaseModel):
     @classmethod
     def limpiar_descripcion(cls, value: str) -> str:
         return " ".join(value.split())
+
+    @model_validator(mode="after")
+    def validar_almacenamiento_especifico(self):
+        referencia = " ".join(self.referencia_almacenamiento.split()) if self.referencia_almacenamiento else None
+        detalle = self.detalle_almacenamiento.strip() if self.detalle_almacenamiento else None
+        self.referencia_almacenamiento = referencia or None
+        self.detalle_almacenamiento = detalle or None
+        if self.modalidad_almacenamiento_id is None:
+            self.referencia_almacenamiento = None
+            self.detalle_almacenamiento = None
+        elif self.referencia_almacenamiento is None:
+            raise ValueError("Indique la asignación o referencia del almacenamiento.")
+        return self
 
 
 class InventarioUpdate(InventarioCreate):

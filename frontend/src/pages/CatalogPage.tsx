@@ -12,6 +12,7 @@ export type CatalogType =
   | 'almacenes'
   | 'ubicaciones'
   | 'condiciones'
+  | 'modalidades-almacenamiento'
 
 type Item = Catalogo | Grupo | Clasificacion | Unidad | Almacen | Ubicacion
 
@@ -24,6 +25,7 @@ const labels: Record<CatalogType, { title: string; singular: string; text: strin
   almacenes: { title: 'Almacenes', singular: 'almacén', text: 'Registra Lima, minas y otros almacenes físicos.' },
   ubicaciones: { title: 'Ubicaciones', singular: 'ubicación', text: 'Administra zonas y espacios dentro de cada almacén.' },
   condiciones: { title: 'Condiciones', singular: 'condición', text: 'Clasifica el estado físico de los artículos.' },
+  'modalidades-almacenamiento': { title: 'Modalidades de almacenamiento', singular: 'modalidad', text: 'Define cajas, racks y otras formas opcionales de asignación física.' },
 }
 
 function isClassification(item: Item): item is Clasificacion {
@@ -81,6 +83,7 @@ export function CatalogPage({ type, notify, embedded = false }: {
         almacenes: () => catalogsApi.warehouses(true),
         ubicaciones: () => catalogsApi.locations(true),
         condiciones: () => catalogsApi.conditions(true),
+        'modalidades-almacenamiento': () => catalogsApi.storageModes(true),
       }
       const [result, warehouseOptions, groupOptions, familyOptions, subfamilyOptions] = await Promise.all([
         loaders[type](),

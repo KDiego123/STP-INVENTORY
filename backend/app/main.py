@@ -25,6 +25,7 @@ from .models import (
     Grupo,
     Inventario,
     InventarioArchivo,
+    ModalidadAlmacenamiento,
     Movimiento,
     SolicitudEquipo,
     SolicitudEquipoArchivo,
@@ -139,6 +140,15 @@ def _validar_catalogos_inventario(db: Session, datos: InventarioCreate):
         condicion = _obtener(db, Condicion, datos.condicion_id, "Condición")
         if not condicion.activo:
             raise HTTPException(status_code=400, detail="Seleccione una condición activa.")
+    if datos.modalidad_almacenamiento_id is not None:
+        modalidad = _obtener(
+            db,
+            ModalidadAlmacenamiento,
+            datos.modalidad_almacenamiento_id,
+            "Modalidad de almacenamiento",
+        )
+        if not modalidad.activo:
+            raise HTTPException(status_code=400, detail="Seleccione una modalidad de almacenamiento activa.")
     if not unidad.permite_decimal and datos.stock_actual != datos.stock_actual.to_integral_value():
         raise HTTPException(
             status_code=400,
@@ -1431,6 +1441,29 @@ def condiciones_editar(pk: int, datos: CatalogoCreate, db: DB):
 @app.patch("/api/catalogos/condiciones/{pk}/estado", response_model=CatalogoBase)
 def condiciones_estado(pk: int, db: DB):
     return _catalogo_estado(db, Condicion, pk, "Condición")
+
+
+@app.get("/api/catalogos/modalidades-almacenamiento", response_model=list[CatalogoBase])
+def modalidades_almacenamiento_listar(db: DB, todos: bool = False):
+    query = select(ModalidadAlmacenamiento).order_by(ModalidadAlmacenamiento.nombre)
+    if not todos:
+        query = query.where(ModalidadAlmacenamiento.activo)
+    return db.scalars(query).all()
+
+
+@app.post("/api/catalogos/modalidades-almacenamiento", response_model=CatalogoBase, status_code=201)
+def modalidades_almacenamiento_crear(datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, ModalidadAlmacenamiento, datos)
+
+
+@app.put("/api/catalogos/modalidades-almacenamiento/{pk}", response_model=CatalogoBase)
+def modalidades_almacenamiento_editar(pk: int, datos: CatalogoCreate, db: DB):
+    return _catalogo_guardar(db, ModalidadAlmacenamiento, datos, pk)
+
+
+@app.patch("/api/catalogos/modalidades-almacenamiento/{pk}/estado", response_model=CatalogoBase)
+def modalidades_almacenamiento_estado(pk: int, db: DB):
+    return _catalogo_estado(db, ModalidadAlmacenamiento, pk, "Modalidad de almacenamiento")
 
 
 @app.get("/api/catalogos/unidades", response_model=list[UnidadOut])

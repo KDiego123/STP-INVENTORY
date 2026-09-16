@@ -7,6 +7,7 @@ import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined'
 import SchemaOutlinedIcon from '@mui/icons-material/SchemaOutlined'
 import StraightenOutlinedIcon from '@mui/icons-material/StraightenOutlined'
 import WarehouseOutlinedIcon from '@mui/icons-material/WarehouseOutlined'
+import AllInboxOutlinedIcon from '@mui/icons-material/AllInboxOutlined'
 import { CatalogPage, type CatalogType } from './CatalogPage'
 
 const sections: Array<{ key: CatalogType; label: string; description: string; icon: ReactNode }> = [
@@ -18,6 +19,7 @@ const sections: Array<{ key: CatalogType; label: string; description: string; ic
   { key: 'almacenes', label: 'Almacenes', description: 'Centros físicos', icon: <WarehouseOutlinedIcon /> },
   { key: 'ubicaciones', label: 'Ubicaciones', description: 'Espacios de almacén', icon: <LocationOnOutlinedIcon /> },
   { key: 'condiciones', label: 'Condiciones', description: 'Estados físicos', icon: <FactCheckOutlinedIcon /> },
+  { key: 'modalidades-almacenamiento', label: 'Modalidades', description: 'Cajas, racks y asignaciones', icon: <AllInboxOutlinedIcon /> },
 ]
 
 export function SettingsPage({ notify }: { notify: (message: string, kind?: 'success' | 'error') => void }) {

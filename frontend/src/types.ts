@@ -64,6 +64,9 @@ export type Inventario = {
   unidad_medida_id: number
   ubicacion_id: number | null
   condicion_id: number | null
+  modalidad_almacenamiento_id: number | null
+  referencia_almacenamiento: string | null
+  detalle_almacenamiento: string | null
   stock_actual: string
   stock_minimo: string | null
   fecha_ultima_entrada: string | null
@@ -80,6 +83,7 @@ export type Inventario = {
   unidad_medida: Unidad
   ubicacion: Ubicacion | null
   condicion: Catalogo | null
+  modalidad_almacenamiento: Catalogo | null
   archivos: InventarioArchivo[]
 }
 

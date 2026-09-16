@@ -118,6 +118,7 @@ export const catalogsApi = {
   units: (all = false) => api<Unidad[]>('/catalogos/unidades', { params: { todos: all } }),
   locations: (all = false) => api<Ubicacion[]>('/catalogos/ubicaciones', { params: { todos: all } }),
   conditions: (all = false) => api<Catalogo[]>('/catalogos/condiciones', { params: { todos: all } }),
+  storageModes: (all = false) => api<Catalogo[]>('/catalogos/modalidades-almacenamiento', { params: { todos: all } }),
   warehouses: (all = false) => api<Almacen[]>('/catalogos/almacenes', { params: { todos: all } }),
   movementTypes: () => api<TipoMovimiento[]>('/catalogos/tipos-movimiento'),
   save: (type: string, body: unknown, id?: number) =>

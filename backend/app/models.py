@@ -120,6 +120,17 @@ class Condicion(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ModalidadAlmacenamiento(Base):
+    __tablename__ = "modalidades_almacenamiento"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(100), unique=True)
+    descripcion: Mapped[str | None] = mapped_column(Text)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class TipoMovimiento(Base):
     __tablename__ = "tipos_movimiento"
 
@@ -143,6 +154,11 @@ class Inventario(Base):
     unidad_medida_id: Mapped[int] = mapped_column(ForeignKey("unidades_medida.id"))
     ubicacion_id: Mapped[int | None] = mapped_column(ForeignKey("ubicaciones.id"))
     condicion_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
+    modalidad_almacenamiento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("modalidades_almacenamiento.id")
+    )
+    referencia_almacenamiento: Mapped[str | None] = mapped_column(String(100))
+    detalle_almacenamiento: Mapped[str | None] = mapped_column(Text)
     stock_actual: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     stock_minimo: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     fecha_ultima_entrada: Mapped[date | None] = mapped_column(Date)
@@ -162,6 +178,7 @@ class Inventario(Base):
     unidad_medida: Mapped[UnidadMedida] = relationship(lazy="selectin")
     ubicacion: Mapped[Ubicacion | None] = relationship(lazy="selectin")
     condicion: Mapped[Condicion | None] = relationship(lazy="selectin")
+    modalidad_almacenamiento: Mapped[ModalidadAlmacenamiento | None] = relationship(lazy="selectin")
     archivos_registros: Mapped[list["InventarioArchivo"]] = relationship(
         lazy="selectin", cascade="all, delete-orphan"
     )

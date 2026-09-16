@@ -12,6 +12,7 @@ import type { Almacen, Catalogo, Clasificacion, Grupo, Inventario, Paginated, Ub
 type Options = {
   grupos: Grupo[]; familias: Catalogo[]; subfamilias: Catalogo[]; clasificaciones: Clasificacion[]
   unidades: Unidad[]; almacenes: Almacen[]; ubicaciones: Ubicacion[]; condiciones: Catalogo[]
+  modalidadesAlmacenamiento: Catalogo[]
 }
 type FormData = {
   codigo: string; descripcion: string; clasificacion_id: string; unidad_medida_id: string
@@ -19,6 +20,8 @@ type FormData = {
   fecha_ultima_entrada: string; fecha_ultima_salida: string
   calibracion: string; fecha_calibracion: string; marca: string; modelo: string
   numero_serie: string; codigo_patrimonial: string; observaciones: string; activo: boolean
+  almacenamiento_aplica: boolean; modalidad_almacenamiento_id: string
+  referencia_almacenamiento: string; detalle_almacenamiento: string
 }
 
 const emptyForm: FormData = {
@@ -26,6 +29,7 @@ const emptyForm: FormData = {
   stock_actual: '0', stock_minimo: '', fecha_ultima_entrada: '', fecha_ultima_salida: '',
   calibracion: '', fecha_calibracion: '', marca: '', modelo: '', numero_serie: '',
   codigo_patrimonial: '', observaciones: '', activo: true,
+  almacenamiento_aplica: false, modalidad_almacenamiento_id: '', referencia_almacenamiento: '', detalle_almacenamiento: '',
 }
 
 const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
@@ -50,7 +54,7 @@ function paginationItems(current: number, pages: number) {
 
 export function InventoryPage({ notify, readOnly = false }: { notify: (message: string, type?: 'success' | 'error') => void; readOnly?: boolean }) {
   const [data, setData] = useState<Paginated<Inventario> | null>(null)
-  const [options, setOptions] = useState<Options>({ grupos: [], familias: [], subfamilias: [], clasificaciones: [], unidades: [], almacenes: [], ubicaciones: [], condiciones: [] })
+  const [options, setOptions] = useState<Options>({ grupos: [], familias: [], subfamilias: [], clasificaciones: [], unidades: [], almacenes: [], ubicaciones: [], condiciones: [], modalidadesAlmacenamiento: [] })
   const [warehouseId, setWarehouseId] = useState('')
   const [filters, setFilters] = useState({ q: '', grupo_id: '', familia_id: '', subfamilia_id: '', ubicacion_id: '', estado: 'activos', calibracion: '', orden: 'desc' })
   const [applied, setApplied] = useState(filters)
@@ -70,12 +74,13 @@ export function InventoryPage({ notify, readOnly = false }: { notify: (message: 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [result, grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones] = await Promise.all([
+      const [result, grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones, modalidadesAlmacenamiento] = await Promise.all([
         inventoryApi.list({ ...applied, almacen_id: warehouseId, page, page_size: pageSize }),
         catalogsApi.groups(), catalogsApi.families(), catalogsApi.subfamilies(), catalogsApi.classifications(),
         catalogsApi.units(), catalogsApi.warehouses(), catalogsApi.locations(), catalogsApi.conditions(),
+        catalogsApi.storageModes(),
       ])
-      setData(result); setOptions({ grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones })
+      setData(result); setOptions({ grupos, familias, subfamilias, clasificaciones, unidades, almacenes, ubicaciones, condiciones, modalidadesAlmacenamiento })
     } catch (err) { setError(err instanceof Error ? err.message : 'Error inesperado') }
     finally { setLoading(false) }
   }, [applied, page, pageSize, warehouseId])
@@ -307,6 +312,15 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
         </div>
       </section>}
 
+      {item.modalidad_almacenamiento && <section className="inventory-detail-section">
+        <h3>Almacenamiento específico</h3>
+        <div className="inventory-detail-grid">
+          <DetailValue label="Modalidad" value={item.modalidad_almacenamiento.nombre} />
+          <DetailValue label="Asignación o referencia" value={item.referencia_almacenamiento} />
+          <DetailValue label="Detalle para localizarlo" value={item.detalle_almacenamiento} wide />
+        </div>
+      </section>}
+
       <section className="inventory-detail-section">
         <h3>Actividad</h3>
         <div className="inventory-detail-grid">
@@ -348,6 +362,9 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     fecha_ultima_salida: item.fecha_ultima_salida ?? '', calibracion: item.calibracion ?? '', fecha_calibracion: item.fecha_calibracion ?? '',
     marca: item.marca ?? '', modelo: item.modelo ?? '', numero_serie: item.numero_serie ?? '',
     codigo_patrimonial: item.codigo_patrimonial ?? '', observaciones: item.observaciones ?? '', activo: item.activo,
+    almacenamiento_aplica: item.modalidad_almacenamiento_id !== null,
+    modalidad_almacenamiento_id: item.modalidad_almacenamiento_id ? String(item.modalidad_almacenamiento_id) : '',
+    referencia_almacenamiento: item.referencia_almacenamiento ?? '', detalle_almacenamiento: item.detalle_almacenamiento ?? '',
   } : emptyForm)
   const [persistedItem, setPersistedItem] = useState<Inventario | null>(item)
   const [documents, setDocuments] = useState<PendingInventoryDocument[]>([])
@@ -396,6 +413,9 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       marca: form.marca.trim() || null, modelo: form.modelo.trim() || null,
       numero_serie: form.numero_serie.trim() || null, codigo_patrimonial: form.codigo_patrimonial.trim() || null,
       observaciones: form.observaciones.trim() || null,
+      modalidad_almacenamiento_id: form.almacenamiento_aplica ? Number(form.modalidad_almacenamiento_id) : null,
+      referencia_almacenamiento: form.almacenamiento_aplica ? form.referencia_almacenamiento.trim() || null : null,
+      detalle_almacenamiento: form.almacenamiento_aplica ? form.detalle_almacenamiento.trim() || null : null,
     }
     try {
       setProgress(persistedItem ? 'Actualizando artículo…' : 'Creando artículo…')
@@ -431,6 +451,17 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       <Field label="Stock mínimo"><input type="number" min="0" step="0.001" value={form.stock_minimo} onChange={(e) => update('stock_minimo', e.target.value)} /></Field>
       <Field label="Última entrada"><input type="date" value={form.fecha_ultima_entrada} onChange={(e) => update('fecha_ultima_entrada', e.target.value)} /></Field>
       <Field label="Última salida"><input type="date" value={form.fecha_ultima_salida} onChange={(e) => update('fecha_ultima_salida', e.target.value)} /></Field>
+      <section className="storage-mode-panel span-3">
+        <div className="storage-mode-heading">
+          <div><strong>Modalidad de almacenamiento</strong><small>Opcional. Indica si el artículo está dentro de una caja, rack u otra asignación específica.</small></div>
+          <label className="storage-mode-toggle"><input type="checkbox" checked={form.almacenamiento_aplica} onChange={(event) => setForm({ ...form, almacenamiento_aplica: event.target.checked, modalidad_almacenamiento_id: event.target.checked ? form.modalidad_almacenamiento_id : '', referencia_almacenamiento: event.target.checked ? form.referencia_almacenamiento : '', detalle_almacenamiento: event.target.checked ? form.detalle_almacenamiento : '' })} /><span>Sí aplica</span></label>
+        </div>
+        {form.almacenamiento_aplica ? <div className="storage-mode-fields">
+          <Field label="Modalidad" required><select value={form.modalidad_almacenamiento_id} onChange={(event) => update('modalidad_almacenamiento_id', event.target.value)} required><option value="">Seleccionar</option>{options.modalidadesAlmacenamiento.map((mode) => <option value={mode.id} key={mode.id}>{mode.nombre}</option>)}</select></Field>
+          <Field label="Asignación o referencia" required><input value={form.referencia_almacenamiento} maxLength={100} onChange={(event) => update('referencia_almacenamiento', event.target.value)} placeholder="Ejemplo: CAJA-015" required /></Field>
+          <Field label="Detalle para localizarlo"><input value={form.detalle_almacenamiento} onChange={(event) => update('detalle_almacenamiento', event.target.value)} placeholder="Ejemplo: nivel superior, lado derecho" /></Field>
+        </div> : <p>El artículo quedará asignado solamente a su ubicación y almacén.</p>}
+      </section>
       <section className="calibration-panel span-3">
         <div className="calibration-panel-heading"><div><strong>Calibración del equipo</strong><small>Estado y fecha de la última calibración registrada.</small></div><span className={`badge ${isEquipment ? 'badge-success' : 'badge-neutral'}`}>{isEquipment ? 'Aplica' : 'No aplica'}</span></div>
         {isEquipment ? <>
