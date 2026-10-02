@@ -80,6 +80,7 @@ class InventarioOut(ORMModel):
     unidad_medida_id: int
     ubicacion_id: int | None
     condicion_id: int | None
+    almacenamiento_especifico: bool
     modalidad_almacenamiento_id: int | None
     referencia_almacenamiento: str | None
     detalle_almacenamiento: str | None
@@ -110,6 +111,7 @@ class InventarioCreate(BaseModel):
     unidad_medida_id: int
     ubicacion_id: int | None = None
     condicion_id: int | None = None
+    almacenamiento_especifico: bool = False
     modalidad_almacenamiento_id: int | None = None
     referencia_almacenamiento: str | None = Field(default=None, max_length=100)
     detalle_almacenamiento: str | None = None
@@ -142,11 +144,10 @@ class InventarioCreate(BaseModel):
         detalle = self.detalle_almacenamiento.strip() if self.detalle_almacenamiento else None
         self.referencia_almacenamiento = referencia or None
         self.detalle_almacenamiento = detalle or None
-        if self.modalidad_almacenamiento_id is None:
+        if not self.almacenamiento_especifico:
+            self.modalidad_almacenamiento_id = None
             self.referencia_almacenamiento = None
             self.detalle_almacenamiento = None
-        elif self.referencia_almacenamiento is None:
-            raise ValueError("Indique la asignación o referencia del almacenamiento.")
         return self
 
 

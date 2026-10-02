@@ -64,6 +64,7 @@ export type Inventario = {
   unidad_medida_id: number
   ubicacion_id: number | null
   condicion_id: number | null
+  almacenamiento_especifico: boolean
   modalidad_almacenamiento_id: number | null
   referencia_almacenamiento: string | null
   detalle_almacenamiento: string | null

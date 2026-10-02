@@ -154,6 +154,7 @@ class Inventario(Base):
     unidad_medida_id: Mapped[int] = mapped_column(ForeignKey("unidades_medida.id"))
     ubicacion_id: Mapped[int | None] = mapped_column(ForeignKey("ubicaciones.id"))
     condicion_id: Mapped[int | None] = mapped_column(ForeignKey("condiciones.id"))
+    almacenamiento_especifico: Mapped[bool] = mapped_column(Boolean, default=False)
     modalidad_almacenamiento_id: Mapped[int | None] = mapped_column(
         ForeignKey("modalidades_almacenamiento.id")
     )

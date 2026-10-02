@@ -80,6 +80,7 @@ Las ampliaciones posteriores se ejecutan después de `009`, en orden:
 ```text
 010_archivos_inventario.sql
 011_modalidad_almacenamiento.sql
+012_almacenamiento_especifico_opcional.sql
 ```
 
 Este SQL elimina los datos operativos de prueba, unidades, condiciones,

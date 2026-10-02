@@ -358,10 +358,10 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
         </div>
       </section>}
 
-      {item.modalidad_almacenamiento && <section className="inventory-detail-section">
+      {item.almacenamiento_especifico && <section className="inventory-detail-section">
         <h3>Almacenamiento específico</h3>
         <div className="inventory-detail-grid">
-          <DetailValue label="Modalidad" value={item.modalidad_almacenamiento.nombre} />
+          <DetailValue label="Modalidad" value={item.modalidad_almacenamiento?.nombre} />
           <DetailValue label="Asignación o referencia" value={item.referencia_almacenamiento} />
           <DetailValue label="Detalle para localizarlo" value={item.detalle_almacenamiento} wide />
         </div>
@@ -408,7 +408,7 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
     fecha_ultima_salida: item.fecha_ultima_salida ?? '', calibracion: item.calibracion ?? '', fecha_calibracion: item.fecha_calibracion ?? '',
     marca: item.marca ?? '', modelo: item.modelo ?? '', numero_serie: item.numero_serie ?? '',
     codigo_patrimonial: item.codigo_patrimonial ?? '', observaciones: item.observaciones ?? '', activo: item.activo,
-    almacenamiento_aplica: item.modalidad_almacenamiento_id !== null,
+    almacenamiento_aplica: item.almacenamiento_especifico,
     modalidad_almacenamiento_id: item.modalidad_almacenamiento_id ? String(item.modalidad_almacenamiento_id) : '',
     referencia_almacenamiento: item.referencia_almacenamiento ?? '', detalle_almacenamiento: item.detalle_almacenamiento ?? '',
   } : emptyForm)
@@ -459,7 +459,8 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       marca: form.marca.trim() || null, modelo: form.modelo.trim() || null,
       numero_serie: form.numero_serie.trim() || null, codigo_patrimonial: form.codigo_patrimonial.trim() || null,
       observaciones: form.observaciones.trim() || null,
-      modalidad_almacenamiento_id: form.almacenamiento_aplica ? Number(form.modalidad_almacenamiento_id) : null,
+      almacenamiento_especifico: form.almacenamiento_aplica,
+      modalidad_almacenamiento_id: form.almacenamiento_aplica && form.modalidad_almacenamiento_id ? Number(form.modalidad_almacenamiento_id) : null,
       referencia_almacenamiento: form.almacenamiento_aplica ? form.referencia_almacenamiento.trim() || null : null,
       detalle_almacenamiento: form.almacenamiento_aplica ? form.detalle_almacenamiento.trim() || null : null,
     }
@@ -499,12 +500,12 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       <Field label="Última salida"><input type="date" value={form.fecha_ultima_salida} onChange={(e) => update('fecha_ultima_salida', e.target.value)} /></Field>
       <section className="storage-mode-panel span-3">
         <div className="storage-mode-heading">
-          <div><strong>Modalidad de almacenamiento</strong><small>Opcional. Indica si el artículo está dentro de una caja, rack u otra asignación específica.</small></div>
+          <div><strong>Modalidad de almacenamiento</strong><small>Indica si el artículo usa una forma de almacenamiento adicional. Los detalles son opcionales.</small></div>
           <label className="storage-mode-toggle"><input type="checkbox" checked={form.almacenamiento_aplica} onChange={(event) => setForm({ ...form, almacenamiento_aplica: event.target.checked, modalidad_almacenamiento_id: event.target.checked ? form.modalidad_almacenamiento_id : '', referencia_almacenamiento: event.target.checked ? form.referencia_almacenamiento : '', detalle_almacenamiento: event.target.checked ? form.detalle_almacenamiento : '' })} /><span>Sí aplica</span></label>
         </div>
         {form.almacenamiento_aplica ? <div className="storage-mode-fields">
-          <Field label="Modalidad" required><select value={form.modalidad_almacenamiento_id} onChange={(event) => update('modalidad_almacenamiento_id', event.target.value)} required><option value="">Seleccionar</option>{options.modalidadesAlmacenamiento.map((mode) => <option value={mode.id} key={mode.id}>{mode.nombre}</option>)}</select></Field>
-          <Field label="Asignación o referencia" required><input value={form.referencia_almacenamiento} maxLength={100} onChange={(event) => update('referencia_almacenamiento', event.target.value)} placeholder="Ejemplo: CAJA-015" required /></Field>
+          <Field label="Modalidad (opcional)"><select value={form.modalidad_almacenamiento_id} onChange={(event) => update('modalidad_almacenamiento_id', event.target.value)}><option value="">Sin especificar</option>{options.modalidadesAlmacenamiento.map((mode) => <option value={mode.id} key={mode.id}>{mode.nombre}</option>)}</select></Field>
+          <Field label="Asignación o referencia (opcional)"><input value={form.referencia_almacenamiento} maxLength={100} onChange={(event) => update('referencia_almacenamiento', event.target.value)} placeholder="Ejemplo: CAJA-015" /></Field>
           <Field label="Detalle para localizarlo"><input value={form.detalle_almacenamiento} onChange={(event) => update('detalle_almacenamiento', event.target.value)} placeholder="Ejemplo: nivel superior, lado derecho" /></Field>
         </div> : <p>El artículo quedará asignado solamente a su ubicación y almacén.</p>}
       </section>

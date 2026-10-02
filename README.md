@@ -58,6 +58,7 @@ modalidad opcional de almacenamiento de los artículos requieren:
 ```text
 importacion-excel/010_archivos_inventario.sql
 importacion-excel/011_modalidad_almacenamiento.sql
+importacion-excel/012_almacenamiento_especifico_opcional.sql
 ```
 
 La migración `010` conserva en PostgreSQL la descripción y metadatos del PDF;
@@ -65,6 +66,8 @@ el contenido privado permanece almacenado en Nextcloud.
 La migración `011` agrega el catálogo editable de modalidades y permite indicar
 una referencia física opcional, como `CAJA-015`, sin cambiar la ubicación ni el
 almacén principal del artículo.
+La migración `012` separa el indicador “Sí aplica” de sus detalles, de modo que
+modalidad, referencia y descripción puedan completarse solo cuando se conozcan.
 
 ## Importante sobre seguridad
 
