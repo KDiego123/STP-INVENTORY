@@ -34,6 +34,12 @@ const emptyForm: FormData = {
 
 const calibrationLabels = { NO_CUMPLE: 'No aplica', SIN_CALIBRAR: 'Sin calibrar', CALIBRADO: 'Calibrado' } as const
 const INVENTORY_ACTOR = 'Logística Lima · Simulación'
+const EQUIPMENT_GROUPS = ['EQUIPO', 'EQUIPO DE COMPUTO', 'ACTIVO', 'MAQ EQP PESADO']
+const MATERIAL_GROUPS = ['MATERIAL', 'MATERIALES']
+
+function belongsToGroup(groupName: string, groups: string[]) {
+  return groups.includes(groupName.trim().toUpperCase())
+}
 
 type PendingInventoryDocument = {
   id: string
@@ -313,7 +319,7 @@ function InventoryDetail({ item, readOnly, onClose, onEdit }: {
   onEdit: () => void
 }) {
   const low = item.stock_minimo !== null && Number(item.stock_actual) <= Number(item.stock_minimo)
-  const isEquipment = ['EQUIPO', 'EQUIPO DE COMPUTO', 'ACTIVO', 'MAQ EQP PESADO'].includes(item.clasificacion.grupo.nombre.trim().toUpperCase())
+  const isEquipment = belongsToGroup(item.clasificacion.grupo.nombre, EQUIPMENT_GROUPS)
   const identity = isEquipment ? [item.marca, item.modelo].filter(Boolean).join(' · ') : ''
   return <Modal wide title={item.descripcion} subtitle={item.codigo} onClose={onClose}>
     <div className="inventory-detail">
@@ -418,7 +424,8 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const selectedClassification = options.clasificaciones.find((x) => x.id === Number(form.clasificacion_id))
-  const isEquipment = selectedClassification ? ['EQUIPO', 'EQUIPO DE COMPUTO', 'ACTIVO', 'MAQ EQP PESADO'].includes(selectedClassification.grupo.nombre.trim().toUpperCase()) : false
+  const isEquipment = selectedClassification ? belongsToGroup(selectedClassification.grupo.nombre, EQUIPMENT_GROUPS) : false
+  const isMaterial = selectedClassification ? belongsToGroup(selectedClassification.grupo.nombre, MATERIAL_GROUPS) : false
   useEffect(() => {
     if (!item && selectedClassification) {
       inventoryApi.nextCode(selectedClassification.grupo_id).then(({ codigo }) => setForm((current) => ({ ...current, codigo }))).catch(() => undefined)
@@ -488,12 +495,13 @@ function InventoryForm({ item, options, onClose, onSaved }: { item: Inventario |
       <Field label="Descripción" required className="span-2"><input value={form.descripcion} onChange={(e) => update('descripcion', e.target.value)} required /></Field>
       <Field label="Clasificación" required className="span-2"><select value={form.clasificacion_id} onChange={(e) => {
         const next = options.clasificaciones.find((x) => x.id === Number(e.target.value))
-        const equipment = next ? ['EQUIPO', 'EQUIPO DE COMPUTO', 'ACTIVO', 'MAQ EQP PESADO'].includes(next.grupo.nombre.trim().toUpperCase()) : false
+        const equipment = next ? belongsToGroup(next.grupo.nombre, EQUIPMENT_GROUPS) : false
         setForm({ ...form, clasificacion_id: e.target.value, calibracion: equipment ? '' : 'NO_CUMPLE', fecha_calibracion: '' })
       }} required><option value="">Seleccionar</option>{options.clasificaciones.map((x) => <option value={x.id} key={x.id}>{x.grupo.nombre} › {x.familia.nombre} › {x.subfamilia.nombre}</option>)}</select></Field>
       <Field label="Unidad de medida" required><select value={form.unidad_medida_id} onChange={(e) => update('unidad_medida_id', e.target.value)} required><option value="">Seleccionar</option>{options.unidades.map((x) => <option value={x.id} key={x.id}>{x.nombre} ({x.codigo})</option>)}</select></Field>
       <Field label="Ubicación"><select value={form.ubicacion_id} onChange={(e) => update('ubicacion_id', e.target.value)}><option value="">Sin ubicación</option>{options.ubicaciones.map((x) => <option value={x.id} key={x.id}>{x.codigo} · {x.almacen.nombre}</option>)}</select></Field>
       <Field label="Condición"><select value={form.condicion_id} onChange={(e) => update('condicion_id', e.target.value)}><option value="">Sin condición</option>{options.condiciones.map((x) => <option value={x.id} key={x.id}>{x.nombre}</option>)}</select></Field>
+      {isMaterial && <Field label="Marca"><input value={form.marca} maxLength={100} onChange={(e) => update('marca', e.target.value)} placeholder="Ejemplo: Pavco, Eternit, Bosch" /></Field>}
       <Field label="Stock actual" required><input type="number" min="0" step="0.001" value={form.stock_actual} onChange={(e) => update('stock_actual', e.target.value)} required /></Field>
       <Field label="Stock mínimo"><input type="number" min="0" step="0.001" value={form.stock_minimo} onChange={(e) => update('stock_minimo', e.target.value)} /></Field>
       <Field label="Última entrada"><input type="date" value={form.fecha_ultima_entrada} onChange={(e) => update('fecha_ultima_entrada', e.target.value)} /></Field>
